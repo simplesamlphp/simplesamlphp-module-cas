@@ -102,6 +102,8 @@ class CAS extends \SimpleSAML\Auth\Source
             'service' => $service,
         ]);
         $result = \SimpleSAML\Utils\HTTP::fetch($url);
+
+        /** @var string $result */
         $res = preg_split("/\r?\n/", $result);
 
         if (strcmp($res[0], "yes") == 0) {
@@ -131,6 +133,7 @@ class CAS extends \SimpleSAML\Auth\Source
         );
         $result = \SimpleSAML\Utils\HTTP::fetch($url);
 
+        /** @var string $result */
         $dom = \SAML2\DOMDocumentFactory::fromString($result);
         $xPath = new \DOMXpath($dom);
         $xPath->registerNamespace("cas", 'http://www.yale.edu/tp/cas');
@@ -149,7 +152,12 @@ class CAS extends \SimpleSAML\Auth\Source
                     }
                 }
             }
-            $casusername = $success->item(0)->textContent;
+
+            $item = $success->item(0);
+            if (is_null($item)) {
+                throw new \Exception("Error parsing serviceResponse.");
+            }
+            $casusername = $item->textContent;
 
             return [$casusername, $attributes];
         }
@@ -195,7 +203,7 @@ class CAS extends \SimpleSAML\Auth\Source
             'Authentication source '.var_export($this->authId, true)
         );
         if ($this->ldapConfig['servers']) {
-            $ldap = new \SimpleSAML\Auth\LDAP(
+            $ldap = new \SimpleSAML\Module\ldap\Auth\Ldap(
                 $config->getString('servers'),
                 $config->getBoolean('enable_tls', false),
                 $config->getBoolean('debug', false),
@@ -204,6 +212,9 @@ class CAS extends \SimpleSAML\Auth\Source
                 $config->getBoolean('referrals', true)
             );
             $ldapattributes = $ldap->validate($this->ldapConfig, $username);
+            if ($ldapattributes === false) {
+                throw new \Exception("Failed to authenticate against LDAP-server.");
+            }
         }
         $attributes = array_merge_recursive($casattributes, $ldapattributes);
         $state['Attributes'] = $attributes;
