@@ -1,7 +1,5 @@
 <?php
 
-use Webmozart\Assert\Assert;
-
 use \SimpleSAML\Module\cas\Auth\Source\CAS;
 
 /**
@@ -19,7 +17,7 @@ if (!isset($_GET['ticket'])) {
 $state['cas:ticket'] = (string) $_GET['ticket'];
 
 // Find authentication source
-Assert::keyExists($state, CAS::AUTHID);
+assert(array_key_exists(CAS::AUTHID, $state));
 $sourceId = $state[CAS::AUTHID];
 
 /** @var \SimpleSAML\Module\cas\Auth\Source\CAS|null $source */

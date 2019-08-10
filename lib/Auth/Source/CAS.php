@@ -2,8 +2,6 @@
 
 namespace SimpleSAML\Module\cas\Auth\Source;
 
-use Webmozart\Assert\Assert;
-
 /**
  * Authenticate using CAS.
  *
@@ -54,8 +52,8 @@ class CAS extends \SimpleSAML\Auth\Source
      */
     public function __construct($info, $config)
     {
-        Assert::isArray($info);
-        Assert::isArray($config);
+        assert(is_array($info));
+        assert(is_array($config));
 
         // Call the parent constructor first, as required by the interface
         parent::__construct($info, $config);
@@ -231,7 +229,7 @@ class CAS extends \SimpleSAML\Auth\Source
      */
     public function authenticate(&$state)
     {
-        Assert::isArray($state);
+        assert(is_array($state));
 
         // We are going to need the authId in order to retrieve this authentication source later
         $state[self::AUTHID] = $this->authId;
@@ -260,7 +258,7 @@ class CAS extends \SimpleSAML\Auth\Source
      */
     public function logout(&$state)
     {
-        Assert::isArray($state);
+        assert(is_array($state));
         $logoutUrl = $this->casConfig['logout'];
 
         \SimpleSAML\Auth\State::deleteState($state);
