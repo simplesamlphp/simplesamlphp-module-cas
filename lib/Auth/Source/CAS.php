@@ -2,6 +2,15 @@
 
 namespace SimpleSAML\Module\cas\Auth\Source;
 
+use DOMXpath;
+use Exception;
+use SAML2\DOMDocumentFactory;
+use SimpleSAML\Auth;
+use SimpleSAML\Configuration;
+use SimpleSAML\Module;
+use SimpleSAML\Module\ldap\Auth\Ldap;
+use SimpleSAML\Utils;
+
 /**
  * Authenticate using CAS.
  *
@@ -11,17 +20,17 @@ namespace SimpleSAML\Module\cas\Auth\Source;
  * @package SimpleSAMLphp
  */
 
-class CAS extends \SimpleSAML\Auth\Source
+class CAS extends Auth\Source
 {
     /**
      * The string used to identify our states.
      */
-    const STAGE_INIT = '\SimpleSAML\Module\cas\Auth\Source\CAS.state';
+    public const STAGE_INIT = '\SimpleSAML\Module\cas\Auth\Source\CAS.state';
 
     /**
      * The key of the AuthId field in the state.
      */
-    const AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
+    public const AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
 
     /**
      * @var array with ldap configuration
@@ -50,20 +59,17 @@ class CAS extends \SimpleSAML\Auth\Source
      * @param array $info  Information about this authentication source.
      * @param array $config  Configuration.
      */
-    public function __construct($info, $config)
+    public function __construct(array $info, array $config)
     {
-        assert(is_array($info));
-        assert(is_array($config));
-
         // Call the parent constructor first, as required by the interface
         parent::__construct($info, $config);
 
         if (!array_key_exists('cas', $config)) {
-            throw new \Exception('cas authentication source is not properly configured: missing [cas]');
+            throw new Exception('cas authentication source is not properly configured: missing [cas]');
         }
 
         if (!array_key_exists('ldap', $config)) {
-            throw new \Exception('ldap authentication source is not properly configured: missing [ldap]');
+            throw new Exception('ldap authentication source is not properly configured: missing [ldap]');
         }
 
         $this->casConfig = $config['cas'];
@@ -74,13 +80,13 @@ class CAS extends \SimpleSAML\Auth\Source
         } elseif (isset($this->casConfig['validate'])) {
             $this->validationMethod = 'validate';
         } else {
-            throw new \Exception("validate or serviceValidate not specified");
+            throw new Exception("validate or serviceValidate not specified");
         }
 
         if (isset($this->casConfig['login'])) {
             $this->loginMethod = $this->casConfig['login'];
         } else {
-            throw new \Exception("cas login URL not specified");
+            throw new Exception("cas login URL not specified");
         }
     }
 
@@ -93,13 +99,13 @@ class CAS extends \SimpleSAML\Auth\Source
      *
      * @return array username and attributes
      */
-    private function casValidate($ticket, $service)
+    private function casValidate(string $ticket, string $service): array
     {
-        $url = \SimpleSAML\Utils\HTTP::addURLParameters($this->casConfig['validate'], [
+        $url = Utils\HTTP::addURLParameters($this->casConfig['validate'], [
             'ticket' => $ticket,
             'service' => $service,
         ]);
-        $result = \SimpleSAML\Utils\HTTP::fetch($url);
+        $result = Utils\HTTP::fetch($url);
 
         /** @var string $result */
         $res = preg_split("/\r?\n/", $result);
@@ -107,7 +113,7 @@ class CAS extends \SimpleSAML\Auth\Source
         if (strcmp($res[0], "yes") == 0) {
             return [$res[1], []];
         } else {
-            throw new \Exception("Failed to validate CAS service ticket: $ticket");
+            throw new Exception("Failed to validate CAS service ticket: $ticket");
         }
     }
 
@@ -120,25 +126,25 @@ class CAS extends \SimpleSAML\Auth\Source
      *
      * @return array username and attributes
      */
-    private function casServiceValidate($ticket, $service)
+    private function casServiceValidate(string $ticket, string $service): array
     {
-        $url = \SimpleSAML\Utils\HTTP::addURLParameters(
+        $url = Utils\HTTP::addURLParameters(
             $this->casConfig['serviceValidate'],
             [
                 'ticket' => $ticket,
                 'service' => $service,
             ]
         );
-        $result = \SimpleSAML\Utils\HTTP::fetch($url);
+        $result = Utils\HTTP::fetch($url);
 
         /** @var string $result */
-        $dom = \SAML2\DOMDocumentFactory::fromString($result);
-        $xPath = new \DOMXpath($dom);
+        $dom = DOMDocumentFactory::fromString($result);
+        $xPath = new DOMXpath($dom);
         $xPath->registerNamespace("cas", 'http://www.yale.edu/tp/cas');
         $success = $xPath->query("/cas:serviceResponse/cas:authenticationSuccess/cas:user");
         if ($success->length == 0) {
             $failure = $xPath->evaluate("/cas:serviceResponse/cas:authenticationFailure");
-            throw new \Exception("Error when validating CAS service ticket: ".$failure->item(0)->textContent);
+            throw new Exception("Error when validating CAS service ticket: " . $failure->item(0)->textContent);
         } else {
             $attributes = [];
             if ($casattributes = $this->casConfig['attributes']) {
@@ -153,7 +159,7 @@ class CAS extends \SimpleSAML\Auth\Source
 
             $item = $success->item(0);
             if (is_null($item)) {
-                throw new \Exception("Error parsing serviceResponse.");
+                throw new Exception("Error parsing serviceResponse.");
             }
             $casusername = $item->textContent;
 
@@ -170,7 +176,7 @@ class CAS extends \SimpleSAML\Auth\Source
      * @param string $service
      * @return array username and attributes
      */
-    protected function casValidation($ticket, $service)
+    protected function casValidation(string $ticket, string $service): array
     {
         switch ($this->validationMethod) {
             case 'validate':
@@ -178,7 +184,7 @@ class CAS extends \SimpleSAML\Auth\Source
             case 'serviceValidate':
                 return $this->casServiceValidate($ticket, $service);
             default:
-                throw new \Exception("validate or serviceValidate not specified");
+                throw new Exception("validate or serviceValidate not specified");
         }
     }
 
@@ -188,20 +194,20 @@ class CAS extends \SimpleSAML\Auth\Source
      * @param array $state
      * @return void
      */
-    public function finalStep(&$state)
+    public function finalStep(array &$state): void
     {
         $ticket = $state['cas:ticket'];
-        $stateID = \SimpleSAML\Auth\State::saveState($state, self::STAGE_INIT);
-        $service = \SimpleSAML\Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
+        $stateID = Auth\State::saveState($state, self::STAGE_INIT);
+        $service = Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
         list($username, $casattributes) = $this->casValidation($ticket, $service);
         $ldapattributes = [];
 
-        $config = \SimpleSAML\Configuration::loadFromArray(
+        $config = Configuration::loadFromArray(
             $this->ldapConfig,
-            'Authentication source '.var_export($this->authId, true)
+            'Authentication source ' . var_export($this->authId, true)
         );
         if ($this->ldapConfig['servers']) {
-            $ldap = new \SimpleSAML\Module\ldap\Auth\Ldap(
+            $ldap = new Ldap(
                 $config->getString('servers'),
                 $config->getBoolean('enable_tls', false),
                 $config->getBoolean('debug', false),
@@ -211,13 +217,13 @@ class CAS extends \SimpleSAML\Auth\Source
             );
             $ldapattributes = $ldap->validate($this->ldapConfig, $username);
             if ($ldapattributes === false) {
-                throw new \Exception("Failed to authenticate against LDAP-server.");
+                throw new Exception("Failed to authenticate against LDAP-server.");
             }
         }
         $attributes = array_merge_recursive($casattributes, $ldapattributes);
         $state['Attributes'] = $attributes;
 
-        \SimpleSAML\Auth\Source::completeAuth($state);
+        Auth\Source::completeAuth($state);
     }
 
 
@@ -227,18 +233,16 @@ class CAS extends \SimpleSAML\Auth\Source
      * @param array &$state  Information about the current authentication.
      * @return void
      */
-    public function authenticate(&$state)
+    public function authenticate(array &$state): void
     {
-        assert(is_array($state));
-
         // We are going to need the authId in order to retrieve this authentication source later
         $state[self::AUTHID] = $this->authId;
 
-        $stateID = \SimpleSAML\Auth\State::saveState($state, self::STAGE_INIT);
+        $stateID = Auth\State::saveState($state, self::STAGE_INIT);
 
-        $serviceUrl = \SimpleSAML\Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
+        $serviceUrl = Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
 
-        \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
+        Utils\HTTP::redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
     }
 
 
@@ -256,13 +260,12 @@ class CAS extends \SimpleSAML\Auth\Source
      * @param array &$state  Information about the current logout operation.
      * @return void
      */
-    public function logout(&$state)
+    public function logout(array &$state): void
     {
-        assert(is_array($state));
         $logoutUrl = $this->casConfig['logout'];
 
-        \SimpleSAML\Auth\State::deleteState($state);
+        Auth\State::deleteState($state);
         // we want cas to log us out
-        \SimpleSAML\Utils\HTTP::redirectTrustedURL($logoutUrl);
+        Utils\HTTP::redirectTrustedURL($logoutUrl);
     }
 }
