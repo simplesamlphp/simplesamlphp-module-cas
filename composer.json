@@ -3,7 +3,7 @@
     "description": "A module that provides CAS authentication",
     "type": "simplesamlphp-module",
     "keywords": ["simplesamlphp", "cas"],
-    "license": "LGPL-3.0-or-later",
+    "license": "LGPL-2.1-or-later",
     "authors": [
         {
             "name": "Olav Morken",
