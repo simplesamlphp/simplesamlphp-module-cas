@@ -191,7 +191,6 @@ class CAS extends Auth\Source
     /**
      * Called by linkback, to finish validate/ finish logging in.
      * @param array $state
-     * @return void
      */
     public function finalStep(array &$state): void
     {
@@ -230,7 +229,6 @@ class CAS extends Auth\Source
      * Log-in using cas
      *
      * @param array &$state  Information about the current authentication.
-     * @return void
      */
     public function authenticate(array &$state): void
     {
@@ -257,7 +255,6 @@ class CAS extends Auth\Source
      * showing the user a page, or redirecting, this function should return.
      *
      * @param array &$state  Information about the current logout operation.
-     * @return void
      */
     public function logout(array &$state): void
     {
