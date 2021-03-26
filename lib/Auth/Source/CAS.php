@@ -100,11 +100,12 @@ class CAS extends Auth\Source
      */
     private function casValidate(string $ticket, string $service): array
     {
-        $url = Utils\HTTP::addURLParameters($this->casConfig['validate'], [
+        $httpUtils = new Utils\HTTP();
+        $url = $httpUtils->addURLParameters($this->casConfig['validate'], [
             'ticket' => $ticket,
             'service' => $service,
         ]);
-        $result = Utils\HTTP::fetch($url);
+        $result = $httpUtils->fetch($url);
 
         /** @var string $result */
         $res = preg_split("/\r?\n/", $result);
@@ -127,14 +128,15 @@ class CAS extends Auth\Source
      */
     private function casServiceValidate(string $ticket, string $service): array
     {
-        $url = Utils\HTTP::addURLParameters(
+        $httpUtils = new Utils\HTTP();
+        $url = $httpUtils->addURLParameters(
             $this->casConfig['serviceValidate'],
             [
                 'ticket' => $ticket,
                 'service' => $service,
             ]
         );
-        $result = Utils\HTTP::fetch($url);
+        $result = $httpUtils->fetch($url);
 
         /** @var string $result */
         $dom = DOMDocumentFactory::fromString($result);
@@ -239,7 +241,8 @@ class CAS extends Auth\Source
 
         $serviceUrl = Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
 
-        Utils\HTTP::redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
+        $httpUtils = new Utils\HTTP();
+        $httpUtils->redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
     }
 
 
@@ -261,7 +264,9 @@ class CAS extends Auth\Source
         $logoutUrl = $this->casConfig['logout'];
 
         Auth\State::deleteState($state);
+
         // we want cas to log us out
-        Utils\HTTP::redirectTrustedURL($logoutUrl);
+        $httpUtils = new Utils\HTTP();
+        $httpUtils->redirectTrustedURL($logoutUrl);
     }
 }
