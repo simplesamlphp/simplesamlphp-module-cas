@@ -34,23 +34,23 @@ class CAS extends Auth\Source
     /**
      * @var array with ldap configuration
      */
-    private $ldapConfig;
+    private array $ldapConfig;
 
     /**
      * @var array cas configuration
      */
-    private $casConfig;
+    private array $casConfig;
 
     /**
      * @var string cas chosen validation method
      */
 
-    private $validationMethod;
+    private string $validationMethod;
 
     /**
      * @var string cas login method
      */
-    private $loginMethod;
+    private string $loginMethod;
 
     /**
      * Constructor for this authentication source.
