@@ -209,11 +209,11 @@ class CAS extends Auth\Source
         if ($this->ldapConfig['servers']) {
             $ldap = new Ldap(
                 $config->getString('servers'),
-                $config->getBoolean('enable_tls', false),
-                $config->getBoolean('debug', false),
-                $config->getInteger('timeout', 0),
-                $config->getInteger('port', 389),
-                $config->getBoolean('referrals', true)
+                $config->getOptionalBoolean('enable_tls', false),
+                $config->getOptionalBoolean('debug', false),
+                $config->getOptionalInteger('timeout', 0),
+                $config->getOptionalInteger('port', 389),
+                $config->getOptionalBoolean('referrals', true)
             );
             $ldapattributes = $ldap->validate($this->ldapConfig, $username);
             if ($ldapattributes === false) {
