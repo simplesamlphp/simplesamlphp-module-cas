@@ -1,0 +1,6 @@
+cas-linkback:
+    path:       /linkback
+    defaults:   { _controller: 'SimpleSAML\Module\cas\Controller\CAS::linkback' }
+cas-legacy-linkback:
+    path:       /linkback.php
+    defaults:   { _controller: 'SimpleSAML\Module\cas\Controller\CAS::linkback' }

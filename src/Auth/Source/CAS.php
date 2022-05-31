@@ -197,8 +197,8 @@ class CAS extends Auth\Source
     public function finalStep(array &$state): void
     {
         $ticket = $state['cas:ticket'];
-        $stateID = Auth\State::saveState($state, self::STAGE_INIT);
-        $service = Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
+        $stateId = Auth\State::saveState($state, self::STAGE_INIT);
+        $service = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
         list($username, $casattributes) = $this->casValidation($ticket, $service);
         $ldapattributes = [];
 
@@ -222,8 +222,6 @@ class CAS extends Auth\Source
         }
         $attributes = array_merge_recursive($casattributes, $ldapattributes);
         $state['Attributes'] = $attributes;
-
-        Auth\Source::completeAuth($state);
     }
 
 
@@ -237,9 +235,9 @@ class CAS extends Auth\Source
         // We are going to need the authId in order to retrieve this authentication source later
         $state[self::AUTHID] = $this->authId;
 
-        $stateID = Auth\State::saveState($state, self::STAGE_INIT);
+        $stateId = Auth\State::saveState($state, self::STAGE_INIT);
 
-        $serviceUrl = Module::getModuleURL('cas/linkback.php', ['stateID' => $stateID]);
+        $serviceUrl = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
 
         $httpUtils = new Utils\HTTP();
         $httpUtils->redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
