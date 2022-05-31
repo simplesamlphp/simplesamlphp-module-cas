@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Test\Module\cas\Controller;
 
+use Exception;
 use PHPUnit\Framework\TestCase;
 use SimpleSAML\Auth;
 use SimpleSAML\Configuration;
@@ -121,6 +122,34 @@ class CASTest extends TestCase
         $this->expectExceptionMessage("BADREQUEST('%REASON%' => 'Missing ticket parameter.')");
 
         $c->linkback($request);
+    }
+
+
+    /**
+     * Test that an unknown authsource in config throws an exception
+     */
+    public function testUnknownAuthSource(): void
+    {
+        $request = Request::create(
+            '/linkback',
+            'GET',
+            [
+                'StateId' => 'abc123',
+                'ticket' => 'abc123',
+            ],
+        );
+
+        $c = new Controller\CAS($this->config);
+        $c->setAuthState(new class () extends Auth\State {
+            public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
+            {
+                return [CAS::AUTHID => 'somethingElse'];
+            }
+        });
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Could not find authentication source with id somethingElse');
+        $result = $c->linkback($request);
     }
 
 
