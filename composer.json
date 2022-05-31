@@ -22,7 +22,7 @@
     },
     "autoload": {
         "psr-4": {
-            "SimpleSAML\\Module\\cas\\": "lib/"
+            "SimpleSAML\\Module\\cas\\": "src/"
         }
     },
     "autoload-dev": {
