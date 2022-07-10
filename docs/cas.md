@@ -1,7 +1,7 @@
 # Using the CAS authentication source with SimpleSAMLphp
 
 This is completely based on the original cas authentication,
-the only diffrence is this is authentication module and not a script.
+the only difference is this is authentication module and not a script.
 
 ## Setting up the CAS authentication module
 
