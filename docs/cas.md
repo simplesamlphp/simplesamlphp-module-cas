@@ -98,6 +98,7 @@ set `ldap` to a `null`:
     'cas:CAS',
     'cas' => [
         ...
-],
-'ldap' => null,
+    ],
+    'ldap' => null,
+]
 ```
