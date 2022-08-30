@@ -91,7 +91,7 @@ and even some custom attributes if they're set:
 ```
 
 You'll probably want to avoid querying LDAP for attributes:
-set `ldap` to a null array (but `ldap` MUST be set):
+set `ldap` to a `null`:
 
 ```php
 'example-cas' => [
@@ -99,5 +99,5 @@ set `ldap` to a null array (but `ldap` MUST be set):
     'cas' => [
         ...
 ],
-'ldap' => [],
+'ldap' => null,
 ```

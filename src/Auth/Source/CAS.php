@@ -213,7 +213,7 @@ class CAS extends Auth\Source
             $this->ldapConfig,
             'Authentication source ' . var_export($this->authId, true)
         );
-        if ($this->ldapConfig['servers']) {
+        if (!empty($this->ldapConfig['servers'])) {
             $ldap = new Ldap(
                 $config->getString('servers'),
                 $config->getOptionalBoolean('enable_tls', false),
