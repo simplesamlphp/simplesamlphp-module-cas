@@ -202,7 +202,7 @@ class CAS extends \SimpleSAML\Auth\Source
             $this->ldapConfig,
             'Authentication source '.var_export($this->authId, true)
         );
-        if ($this->ldapConfig['servers']) {
+        if (!empty($this->ldapConfig['servers'])) {
             $ldap = new \SimpleSAML\Module\ldap\Auth\Ldap(
                 $config->getString('servers'),
                 $config->getBoolean('enable_tls', false),
