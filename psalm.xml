@@ -26,12 +26,5 @@
         <MissingParamType errorLevel="info" />
         <UnusedClass errorLevel="info" />
         <PossiblyUnusedMethod errorLevel="info" />
-
-        <!-- Ignore UnresolvableInclude -->
-        <UnresolvableInclude>
-            <errorLevel type="suppress">
-                <file name="tests/bootstrap.php" />
-            </errorLevel>
-        </UnresolvableInclude>
     </issueHandlers>
 </psalm>
