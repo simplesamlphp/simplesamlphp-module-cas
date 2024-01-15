@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace SimpleSAML\Module\cas\Auth\Source;
 
 use DOMXpath;
