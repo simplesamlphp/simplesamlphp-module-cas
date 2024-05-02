@@ -6,12 +6,16 @@ namespace SimpleSAML\Module\cas\Auth\Source;
 
 use DOMXpath;
 use Exception;
-use SAML2\DOMDocumentFactory;
 use SimpleSAML\Auth;
+use SimpleSAML\CAS\XML\cas\AuthenticationFailure;
+use SimpleSAML\CAS\XML\cas\AuthenticationSuccess;
+use SimpleSAML\CAS\XML\cas\ServiceResponse;
+use SimpleSAML\CAS\Utils\XPath;
 use SimpleSAML\Configuration;
 use SimpleSAML\Module;
 use SimpleSAML\Module\ldap\Auth\Ldap;
 use SimpleSAML\Utils;
+use SimpleSAML\XML\DOMDocumentFactory;
 
 use function array_key_exists;
 use function array_merge_recursive;
@@ -149,32 +153,34 @@ class CAS extends Auth\Source
 
         /** @var string $result */
         $dom = DOMDocumentFactory::fromString($result);
-        $xPath = new DOMXpath($dom);
-        $xPath->registerNamespace("cas", 'http://www.yale.edu/tp/cas');
-        $success = $xPath->query("/cas:serviceResponse/cas:authenticationSuccess/cas:user");
-        if ($success->length == 0) {
-            $failure = $xPath->evaluate("/cas:serviceResponse/cas:authenticationFailure");
-            throw new Exception("Error when validating CAS service ticket: " . $failure->item(0)->textContent);
-        } else {
+
+        $serviceResponse = ServiceResponse::fromXML($dom->documentElement);
+        $message = $serviceResponse->getResponse();
+        if ($message instanceof AuthenticationFailure) {
+            throw new Exception(sprintf(
+                "Error when validating CAS service ticket: %s (%s)",
+                $message->getContent(),
+                $message->getCode(),
+            ));
+        } elseif ($message instanceof AuthenticationSuccess) {
+            $user = $message->getUser()->getContent();
+            $xPath = XPath::getXPath();
+
             $attributes = [];
             if ($casattributes = $this->casConfig['attributes']) {
-                // Some has attributes in the xml - attributes is a list of XPath expressions to get them
+                // Some have attributes in the xml - attributes is a list of XPath expressions to get them
                 foreach ($casattributes as $name => $query) {
-                    $attrs = $xPath->query($query);
+                    $attrs = $xPath->xpQuery($query, $xPath);
                     foreach ($attrs as $attrvalue) {
                         $attributes[$name][] = $attrvalue->textContent;
                     }
                 }
             }
 
-            $item = $success->item(0);
-            if (is_null($item)) {
-                throw new Exception("Error parsing serviceResponse.");
-            }
-            $casusername = $item->textContent;
-
-            return [$casusername, $attributes];
+            return [$user, $attributes];
         }
+
+        throw new Exception("Error parsing serviceResponse.");
     }
 
 
@@ -208,8 +214,8 @@ class CAS extends Auth\Source
         $ticket = $state['cas:ticket'];
         $stateId = Auth\State::saveState($state, self::STAGE_INIT);
         $service = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
-        list($username, $casattributes) = $this->casValidation($ticket, $service);
-        $ldapattributes = [];
+        list($username, $casAttributes) = $this->casValidation($ticket, $service);
+        $ldapAttributes = [];
 
         $config = Configuration::loadFromArray(
             $this->ldapConfig,
@@ -224,12 +230,13 @@ class CAS extends Auth\Source
                 $config->getOptionalInteger('port', 389),
                 $config->getOptionalBoolean('referrals', true)
             );
-            $ldapattributes = $ldap->validate($this->ldapConfig, $username);
-            if ($ldapattributes === false) {
+
+            $ldapAttributes = $ldap->validate($this->ldapConfig, $username);
+            if ($ldapAttributes === false) {
                 throw new Exception("Failed to authenticate against LDAP-server.");
             }
         }
-        $attributes = array_merge_recursive($casattributes, $ldapattributes);
+        $attributes = array_merge_recursive($casAttributes, $ldapAttributes);
         $state['Attributes'] = $attributes;
     }
 
