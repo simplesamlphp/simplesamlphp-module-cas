@@ -45,7 +45,7 @@ class CAS
      * @throws \Exception
      */
     public function __construct(
-        protected Configuration $config
+        protected Configuration $config,
     ) {
     }
 

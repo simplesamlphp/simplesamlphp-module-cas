@@ -43,7 +43,7 @@ class CASTest extends TestCase
                 ],
             ],
             '[ARRAY]',
-            'simplesaml'
+            'simplesaml',
         );
         Configuration::setPreLoadedConfig($this->config, 'config.php');
 
@@ -68,7 +68,7 @@ class CASTest extends TestCase
     {
         $request = Request::create(
             '/linkback',
-            'GET'
+            'GET',
         );
 
         $c = new Controller\CAS($this->config);

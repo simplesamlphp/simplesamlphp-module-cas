@@ -143,7 +143,7 @@ class CAS extends Auth\Source
             [
                 'ticket' => $ticket,
                 'service' => $service,
-            ]
+            ],
         );
         $result = $httpUtils->fetch($url);
 
@@ -213,7 +213,7 @@ class CAS extends Auth\Source
 
         $config = Configuration::loadFromArray(
             $this->ldapConfig,
-            'Authentication source ' . var_export($this->authId, true)
+            'Authentication source ' . var_export($this->authId, true),
         );
         if (!empty($this->ldapConfig['servers'])) {
             $ldap = new Ldap(
@@ -222,7 +222,7 @@ class CAS extends Auth\Source
                 $config->getOptionalBoolean('debug', false),
                 $config->getOptionalInteger('timeout', 0),
                 $config->getOptionalInteger('port', 389),
-                $config->getOptionalBoolean('referrals', true)
+                $config->getOptionalBoolean('referrals', true),
             );
             $ldapattributes = $ldap->validate($this->ldapConfig, $username);
             if ($ldapattributes === false) {
