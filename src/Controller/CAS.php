@@ -80,11 +80,11 @@ class CAS
      */
     public function linkback(Request $request): RunnableResponse
     {
-        if (!$request->query->has('stateId')) {
+        if (!$request->query->has('StateId')) {
             throw new Error\BadRequest('Missing StateId parameter.');
         }
 
-        $stateId = $request->query->get('stateId');
+        $stateId = $request->query->get('StateId');
         $state = $this->authState::loadState($stateId, CASSource::STAGE_INIT);
 
         if (!$request->query->has('ticket')) {
