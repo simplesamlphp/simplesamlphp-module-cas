@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Module\cas\Auth\Source;
 
-use DOMXpath;
 use Exception;
 use SimpleSAML\Auth;
+use SimpleSAML\CAS\Utils\XPath;
 use SimpleSAML\CAS\XML\cas\AuthenticationFailure;
 use SimpleSAML\CAS\XML\cas\AuthenticationSuccess;
 use SimpleSAML\CAS\XML\cas\ServiceResponse;
-use SimpleSAML\CAS\Utils\XPath;
 use SimpleSAML\Configuration;
 use SimpleSAML\Module;
 use SimpleSAML\Module\ldap\Auth\Ldap;
@@ -19,7 +18,6 @@ use SimpleSAML\XML\DOMDocumentFactory;
 
 use function array_key_exists;
 use function array_merge_recursive;
-use function is_null;
 use function preg_split;
 use function strcmp;
 use function var_export;
