@@ -80,7 +80,7 @@ class CAS
      */
     public function linkback(Request $request): RunnableResponse
     {
-        if (!$request->query->has('stateId')) {
+        if (!$request->query->has('StateId')) {
             throw new Error\BadRequest('Missing StateId parameter.');
         }
 
