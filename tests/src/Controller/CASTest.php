@@ -12,7 +12,7 @@ use SimpleSAML\Error;
 use SimpleSAML\HTTP\RunnableResponse;
 use SimpleSAML\Module\cas\Auth\Source\CAS;
 use SimpleSAML\Module\cas\Controller;
-use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\{Request, Response};
 
 /**
  * Set of tests for the controllers in the "cas" module.
@@ -180,7 +180,7 @@ class CASTest extends TestCase
                 //dummy
             }
 
-            public function authenticate(array &$state): void
+            public function authenticate(Request $request, array &$state): Response
             {
                 //dummy
             }
