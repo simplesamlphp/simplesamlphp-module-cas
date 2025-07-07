@@ -85,6 +85,7 @@ class CAS
         }
 
         $stateId = $request->query->getString('stateId');
+        /** @var array<mixed> $state */
         $state = $this->authState::loadState($stateId, CASSource::STAGE_INIT);
 
         if (!$request->query->has('ticket')) {

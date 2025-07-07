@@ -20,6 +20,7 @@ use function array_key_exists;
 use function array_merge_recursive;
 use function preg_split;
 use function strcmp;
+use function strval;
 use function var_export;
 
 /**
@@ -159,18 +160,18 @@ class CAS extends Auth\Source
         if ($message instanceof AuthenticationFailure) {
             throw new Exception(sprintf(
                 "Error when validating CAS service ticket: %s (%s)",
-                $message->getContent(),
-                $message->getCode(),
+                strval($message->getContent()),
+                strval($message->getCode()),
             ));
         } elseif ($message instanceof AuthenticationSuccess) {
             $user = $message->getUser()->getContent();
-            $xPath = XPath::getXPath();
+            $xPath = XPath::getXPath($message->toXML());
 
             $attributes = [];
             if ($casattributes = $this->casConfig['attributes']) {
                 // Some have attributes in the xml - attributes is a list of XPath expressions to get them
                 foreach ($casattributes as $name => $query) {
-                    $attrs = $xPath->xpQuery($query, $xPath);
+                    $attrs = XPath::xpQuery($message->toXML(), $query, $xPath);
                     foreach ($attrs as $attrvalue) {
                         $attributes[$name][] = $attrvalue->textContent;
                     }
