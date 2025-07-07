@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\{Request, Response};
  *
  * @package SimpleSAML\Test
  */
-class CASTest extends TestCase
+final class CASTest extends TestCase
 {
     /** @var \SimpleSAML\Configuration */
     protected Configuration $config;
@@ -112,6 +112,7 @@ class CASTest extends TestCase
 
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
+            /** @return array<mixed>|null */
             public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
             {
                 return [];
@@ -141,6 +142,7 @@ class CASTest extends TestCase
 
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
+            /** @return array<mixed>|null */
             public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
             {
                 return [CAS::AUTHID => 'somethingElse'];
@@ -169,6 +171,7 @@ class CASTest extends TestCase
 
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
+            /** @return array<mixed>|null */
             public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
             {
                 return [CAS::AUTHID => 'something'];
@@ -180,7 +183,10 @@ class CASTest extends TestCase
                 //dummy
             }
 
-            public function authenticate(Request $request, array &$state): Response
+            /**
+             * @param array<mixed> $state
+             */
+            public function authenticate(array &$state): void
             {
                 //dummy
             }
@@ -192,6 +198,8 @@ class CASTest extends TestCase
                     {
                         //dummy
                     }
+
+                    /** @param array<mixed> $state */
                     public function finalStep(array &$state): void
                     {
                         //dummy
