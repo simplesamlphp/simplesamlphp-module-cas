@@ -41,12 +41,12 @@ class CAS extends Auth\Source
     public const AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
 
     /**
-     * @var array with ldap configuration
+     * @var array<mixed> with ldap configuration
      */
     private array $ldapConfig;
 
     /**
-     * @var array cas configuration
+     * @var array<mixed> cas configuration
      */
     private array $casConfig;
 
@@ -64,8 +64,8 @@ class CAS extends Auth\Source
     /**
      * Constructor for this authentication source.
      *
-     * @param array $info  Information about this authentication source.
-     * @param array $config  Configuration.
+     * @param array<mixed> $info  Information about this authentication source.
+     * @param array<mixed> $config  Configuration.
      */
     public function __construct(array $info, array $config)
     {
@@ -105,7 +105,7 @@ class CAS extends Auth\Source
      * @param string $ticket
      * @param string $service
      *
-     * @return array username and attributes
+     * @return array<mixed> username and attributes
      */
     private function casValidate(string $ticket, string $service): array
     {
@@ -114,9 +114,11 @@ class CAS extends Auth\Source
             'ticket' => $ticket,
             'service' => $service,
         ]);
-        $result = $httpUtils->fetch($url);
 
         /** @var string $result */
+        $result = $httpUtils->fetch($url);
+
+        /** @var string $res */
         $res = preg_split("/\r?\n/", $result);
 
         if (strcmp($res[0], "yes") == 0) {
@@ -133,7 +135,7 @@ class CAS extends Auth\Source
      * @param string $ticket
      * @param string $service
      *
-     * @return array username and attributes
+     * @return array<mixed> username and attributes
      */
     private function casServiceValidate(string $ticket, string $service): array
     {
@@ -151,8 +153,9 @@ class CAS extends Auth\Source
         $dom = DOMDocumentFactory::fromString($result);
         $xPath = new DOMXpath($dom);
         $xPath->registerNamespace("cas", 'http://www.yale.edu/tp/cas');
+
         $success = $xPath->query("/cas:serviceResponse/cas:authenticationSuccess/cas:user");
-        if ($success->length == 0) {
+        if ($success === false || $success->length === 0) {
             $failure = $xPath->evaluate("/cas:serviceResponse/cas:authenticationFailure");
             throw new Exception("Error when validating CAS service ticket: " . $failure->item(0)->textContent);
         } else {
@@ -160,6 +163,7 @@ class CAS extends Auth\Source
             if ($casattributes = $this->casConfig['attributes']) {
                 // Some has attributes in the xml - attributes is a list of XPath expressions to get them
                 foreach ($casattributes as $name => $query) {
+                    /** @var \DOMNodeList<\DOMNode> $attrs */
                     $attrs = $xPath->query($query);
                     foreach ($attrs as $attrvalue) {
                         $attributes[$name][] = $attrvalue->textContent;
@@ -184,7 +188,7 @@ class CAS extends Auth\Source
      *
      * @param string $ticket
      * @param string $service
-     * @return array username and attributes
+     * @return array<mixed> username and attributes
      */
     protected function casValidation(string $ticket, string $service): array
     {
@@ -201,7 +205,7 @@ class CAS extends Auth\Source
 
     /**
      * Called by linkback, to finish validate/ finish logging in.
-     * @param array $state
+     * @param array<mixed> $state
      */
     public function finalStep(array &$state): void
     {
@@ -237,7 +241,7 @@ class CAS extends Auth\Source
     /**
      * Log-in using cas
      *
-     * @param array &$state  Information about the current authentication.
+     * @param array<mixed> &$state  Information about the current authentication.
      */
     public function authenticate(array &$state): void
     {
@@ -264,7 +268,7 @@ class CAS extends Auth\Source
      * should be called with the state. If this operation can be completed without
      * showing the user a page, or redirecting, this function should return.
      *
-     * @param array &$state  Information about the current logout operation.
+     * @param array<mixed> &$state  Information about the current logout operation.
      */
     public function logout(array &$state): void
     {

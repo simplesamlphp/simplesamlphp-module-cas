@@ -84,14 +84,14 @@ class CAS
             throw new Error\BadRequest('Missing StateId parameter.');
         }
 
-        $stateId = $request->query->get('stateId');
+        $stateId = $request->query->getString('stateId');
         $state = $this->authState::loadState($stateId, CASSource::STAGE_INIT);
 
         if (!$request->query->has('ticket')) {
             throw new Error\BadRequest('Missing ticket parameter.');
         }
 
-        $ticket = $request->query->get('ticket');
+        $ticket = $request->query->getString('ticket');
         $state['cas:ticket'] = $ticket;
 
         // Find authentication source
