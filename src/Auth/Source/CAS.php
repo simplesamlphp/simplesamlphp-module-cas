@@ -123,7 +123,7 @@ class CAS extends Auth\Source
         /** @var string $result */
         $result = $httpUtils->fetch($url);
 
-        /** @var string $res */
+        /** @var list<array{string, int<0, max>}|string> $res */
         $res = preg_split("/\r?\n/", $result);
 
         if (strcmp($res[0], "yes") == 0) {
