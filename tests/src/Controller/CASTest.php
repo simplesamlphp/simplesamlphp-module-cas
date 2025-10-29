@@ -12,7 +12,7 @@ use SimpleSAML\Error;
 use SimpleSAML\HTTP\RunnableResponse;
 use SimpleSAML\Module\cas\Auth\Source\CAS;
 use SimpleSAML\Module\cas\Controller;
-use Symfony\Component\HttpFoundation\{Request, Response};
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Set of tests for the controllers in the "cas" module.
@@ -183,6 +183,7 @@ final class CASTest extends TestCase
                 //dummy
             }
 
+
             /**
              * @param array<mixed> $state
              */
@@ -191,6 +192,7 @@ final class CASTest extends TestCase
                 //dummy
             }
 
+
             public static function getById(string $authId, ?string $type = null): ?Auth\Source
             {
                 return new class () extends CAS {
@@ -198,6 +200,7 @@ final class CASTest extends TestCase
                     {
                         //dummy
                     }
+
 
                     /** @param array<mixed> $state */
                     public function finalStep(array &$state): void

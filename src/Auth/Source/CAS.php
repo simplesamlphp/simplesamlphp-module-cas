@@ -43,6 +43,7 @@ class CAS extends Auth\Source
      */
     public const AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
 
+
     /**
      * @var array<mixed> with ldap configuration
      */
@@ -63,6 +64,7 @@ class CAS extends Auth\Source
      * @var string cas login method
      */
     private string $loginMethod;
+
 
     /**
      * Constructor for this authentication source.
