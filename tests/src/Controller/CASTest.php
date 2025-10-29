@@ -113,7 +113,7 @@ final class CASTest extends TestCase
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
             /** @return array<mixed>|null */
-            public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
+            public static function loadState(string $id, string $stage, bool $allowMissing = false): array
             {
                 return [];
             }
@@ -143,7 +143,7 @@ final class CASTest extends TestCase
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
             /** @return array<mixed>|null */
-            public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
+            public static function loadState(string $id, string $stage, bool $allowMissing = false): array
             {
                 return [CAS::AUTHID => 'somethingElse'];
             }
@@ -172,7 +172,7 @@ final class CASTest extends TestCase
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
             /** @return array<mixed>|null */
-            public static function loadState(string $id, string $stage, bool $allowMissing = false): ?array
+            public static function loadState(string $id, string $stage, bool $allowMissing = false): array
             {
                 return [CAS::AUTHID => 'something'];
             }
@@ -193,7 +193,7 @@ final class CASTest extends TestCase
             }
 
 
-            public static function getById(string $authId, ?string $type = null): ?Auth\Source
+            public static function getById(string $authId, ?string $type = null): Auth\Source
             {
                 return new class () extends CAS {
                     public function __construct()
