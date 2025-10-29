@@ -62,7 +62,7 @@ final class CASTest extends TestCase
 
 
     /**
-     * Test that request without StateId results in a BadRequest-error
+     * Test that request without stateId results in a BadRequest-error
      */
     public function testNoStateId(): void
     {
@@ -74,7 +74,7 @@ final class CASTest extends TestCase
         $c = new Controller\CAS($this->config);
 
         $this->expectException(Error\BadRequest::class);
-        $this->expectExceptionMessage("BADREQUEST('%REASON%' => 'Missing StateId parameter.')");
+        $this->expectExceptionMessage("BADREQUEST('%REASON%' => 'Missing stateId parameter.')");
 
         $c->linkback($request);
     }
@@ -88,7 +88,7 @@ final class CASTest extends TestCase
         $request = Request::create(
             '/linkback',
             'GET',
-            ['StateId' => 'abc123'],
+            ['stateId' => 'abc123'],
         );
 
         $c = new Controller\CAS($this->config);
@@ -107,7 +107,7 @@ final class CASTest extends TestCase
         $request = Request::create(
             '/linkback',
             'GET',
-            ['StateId' => 'abc123'],
+            ['stateId' => 'abc123'],
         );
 
         $c = new Controller\CAS($this->config);
@@ -135,7 +135,7 @@ final class CASTest extends TestCase
             '/linkback',
             'GET',
             [
-                'StateId' => 'abc123',
+                'stateId' => 'abc123',
                 'ticket' => 'abc123',
             ],
         );
@@ -164,7 +164,7 @@ final class CASTest extends TestCase
             '/linkback',
             'GET',
             [
-                'StateId' => 'abc123',
+                'stateId' => 'abc123',
                 'ticket' => 'abc123',
             ],
         );
