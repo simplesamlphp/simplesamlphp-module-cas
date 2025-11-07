@@ -170,6 +170,9 @@ class CAS extends Auth\Source
 
             // Build XPath from the same document/node we will query and reuse it.
             $element = $message->toXML();
+            // Dump the XML we received from the CAS server
+            Logger::debug('CAS client: serviceValidate XML: ' . $element->ownerDocument?->saveXML());
+
             $xPath = XPath::getXPath($element);
 
             $attributes = [];
@@ -180,6 +183,10 @@ class CAS extends Auth\Source
                     foreach ($attrs as $attrvalue) {
                         $attributes[$name][] = $attrvalue->textContent;
                     }
+                    // Log what we parsed for this attribute name
+                    Logger::debug(
+                        sprintf('CAS client: parsed attribute %s => %s', $name, json_encode($attributes[$name] ?? [])),
+                    );
                 }
             }
 
