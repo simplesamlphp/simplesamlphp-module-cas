@@ -167,13 +167,16 @@ class CAS extends Auth\Source
             ));
         } elseif ($message instanceof AuthenticationSuccess) {
             $user = $message->getUser()->getContent();
-            $xPath = XPath::getXPath($message->toXML());
+
+            // Build XPath from the same document/node we will query and reuse it.
+            $element = $message->toXML();
+            $xPath = XPath::getXPath($element);
 
             $attributes = [];
             if ($casattributes = $this->casConfig['attributes']) {
                 // Some have attributes in the xml - attributes is a list of XPath expressions to get them
                 foreach ($casattributes as $name => $query) {
-                    $attrs = XPath::xpQuery($message->toXML(), $query, $xPath);
+                    $attrs = XPath::xpQuery($element, $query, $xPath);
                     foreach ($attrs as $attrvalue) {
                         $attributes[$name][] = $attrvalue->textContent;
                     }
