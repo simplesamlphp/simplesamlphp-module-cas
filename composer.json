@@ -46,10 +46,31 @@
         "symfony/http-foundation": "^6.4"
     },
     "require-dev": {
-        "simplesamlphp/simplesamlphp-test-framework": "^1.9.2"
+        "simplesamlphp/simplesamlphp-test-framework": "^1.9.2",
+        "phpunit/phpunit": "^10",
+        "icanhazstring/composer-unused": "^0.9.5",
+        "squizlabs/php_codesniffer": "^4.0.0",
+        "phpstan/phpstan": "^1.11",
+        "maglnet/composer-require-checker": "^4"
     },
     "support": {
         "issues": "https://github.com/simplesamlphp/simplesamlphp-module-cas/issues",
         "source": "https://github.com/simplesamlphp/simplesamlphp-module-cas"
+    },
+    "scripts": {
+        "pre-commit": [
+            "vendor/bin/phpcs -p",
+            "vendor/bin/composer-require-checker check --config-file=tools/composer-require-checker.json composer.json",
+            "vendor/bin/phpstan analyze -c phpstan.neon",
+            "vendor/bin/phpstan analyze -c phpstan-dev.neon",
+            "vendor/bin/composer-unused",
+            "vendor/bin/phpunit --no-coverage --testdox"
+        ],
+        "tests": [
+            "vendor/bin/phpunit --no-coverage"
+        ],
+        "propose-fix": [
+            "vendor/bin/phpcs --report=diff"
+        ]
     }
 }

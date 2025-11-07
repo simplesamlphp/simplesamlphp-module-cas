@@ -35,6 +35,11 @@ final class CASTest extends TestCase
     {
         parent::setUp();
 
+        // Minimal server globals needed by SimpleSAML internals
+        $_SERVER['REQUEST_URI'] = '/linkback';
+        $_SERVER['HTTP_HOST'] = 'localhost';
+        $_SERVER['HTTPS'] = 'off';
+
         $this->config = Configuration::loadFromArray(
             [
                 'module.enable' => [
@@ -112,7 +117,7 @@ final class CASTest extends TestCase
 
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
-            /** @return array<mixed>|null */
+            /** @return array<string, mixed> */
             public static function loadState(string $id, string $stage, bool $allowMissing = false): array
             {
                 return [];
@@ -142,7 +147,7 @@ final class CASTest extends TestCase
 
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
-            /** @return array<mixed>|null */
+            /** @return array<string, mixed> */
             public static function loadState(string $id, string $stage, bool $allowMissing = false): array
             {
                 return [CAS::AUTHID => 'somethingElse'];
@@ -171,7 +176,7 @@ final class CASTest extends TestCase
 
         $c = new Controller\CAS($this->config);
         $c->setAuthState(new class () extends Auth\State {
-            /** @return array<mixed>|null */
+            /** @return array<string, mixed> */
             public static function loadState(string $id, string $stage, bool $allowMissing = false): array
             {
                 return [CAS::AUTHID => 'something'];
