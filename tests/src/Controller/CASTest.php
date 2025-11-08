@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace SimpleSAML\Test\Module\cas\Controller;
 
 use Exception;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SimpleSAML\Auth;
+use SimpleSAML\CAS\XML\cas\AuthenticationSuccess;
+use SimpleSAML\CAS\XML\cas\ServiceResponse;
 use SimpleSAML\Configuration;
 use SimpleSAML\Error;
 use SimpleSAML\HTTP\RunnableResponse;
 use SimpleSAML\Module\cas\Auth\Source\CAS;
 use SimpleSAML\Module\cas\Controller;
+use SimpleSAML\XML\DOMDocumentFactory;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -52,16 +56,7 @@ final class CASTest extends TestCase
         );
         Configuration::setPreLoadedConfig($this->config, 'config.php');
 
-        $this->sourceConfig = Configuration::loadFromArray([
-            'something' => [
-                'cas:CAS',
-                'cas' => [
-                    'login' => 'https://example.org/login',
-                    'validate' => 'https://example.org/validate',
-                ],
-                'ldap' => [],
-            ],
-        ]);
+        $this->sourceConfig = Configuration::getConfig('authsources.php');
         Configuration::setPreLoadedConfig($this->sourceConfig, 'authsources.php');
     }
 
@@ -218,5 +213,78 @@ final class CASTest extends TestCase
 
         $result = $c->linkback($request);
         $this->assertInstanceOf(RunnableResponse::class, $result);
+    }
+
+    /**
+     * Provide both CAS configs: relative (casserver) and absolute (casserver_legacy).
+     *
+     * @return array<array{0: string}>
+     */
+    public static function casConfigsProvider(): array
+    {
+        return [
+            ['casserver'],
+            ['casserver_legacy'],
+        ];
+    }
+
+    /**
+     * Run the same extraction assertions for both configurations.
+     *
+     * @param string $sourceKey The key of the CAS configuration to test ('casserver' or 'casserver_legacy')
+     * @throws \ReflectionException
+     */
+    #[DataProvider('casConfigsProvider')]
+    public function testCasConfigAbsoluteXPathsReturnValues(string $sourceKey): void
+    {
+        $authsources = Configuration::getConfig('authsources.php');
+        $config = $authsources->toArray();
+
+        self::assertIsArray($config, 'authsources.php did not return expected $config array');
+        self::assertArrayHasKey($sourceKey, $config, "Missing source '$sourceKey' in authsources.php");
+        $sourceConfig = $config[$sourceKey];
+        self::assertArrayHasKey('cas', $sourceConfig, "Missing 'cas' config for '$sourceKey'");
+        self::assertArrayHasKey('ldap', $sourceConfig, "Missing 'ldap' config for '$sourceKey'");
+
+        // Load the CAS success message XML and build an AuthenticationSuccess message
+        $successXmlFile = dirname(__DIR__, 1) . '/../response/cas-success-service-response.xml';
+        self::assertFileExists($successXmlFile, 'CAS success XML not found at expected path');
+
+        $dom = DOMDocumentFactory::fromFile($successXmlFile);
+        // Ensure documentElement is a DOMElement before passing to fromXML()
+        $root = $dom->documentElement;
+        if (!$root instanceof \DOMElement) {
+            self::fail('Loaded XML does not have a document element');
+        }
+        $serviceResponse = ServiceResponse::fromXML($root);
+        $message = $serviceResponse->getResponse();
+        self::assertInstanceOf(
+            AuthenticationSuccess::class,
+            $message,
+            'Expected AuthenticationSuccess message',
+        );
+
+        // Instantiate the CAS source with the selected configuration
+        $cas = new Cas(['AuthId' => 'unit-cas'], $sourceConfig);
+
+        // Invoke the private parseUserAndAttributes() method via reflection
+        $refMethod = new \ReflectionMethod(Cas::class, 'parseUserAndAttributes');
+        $refMethod->setAccessible(true);
+        /** @var array{0:string,1:array<string,array<int,string>>} $result */
+        $result = $refMethod->invoke($cas, $message);
+
+        // Assert user and attributes are identical for both configurations
+        [$user, $attributes] = $result;
+
+        self::assertSame('jdoe', $user, "$sourceKey: user mismatch");
+        self::assertSame(['jdoe'], $attributes['uid'] ?? [], "$sourceKey: uid not extracted");
+        self::assertSame(['Doe'], $attributes['sn'] ?? [], "$sourceKey: sn not extracted");
+        self::assertSame(['John'], $attributes['givenName'] ?? [], "$sourceKey: givenName not extracted");
+        self::assertSame(['jdoe@example.edu'], $attributes['mail'] ?? [], "$sourceKey: mail not extracted");
+        self::assertSame(
+            ['jdoe@example.edu'],
+            $attributes['eduPersonPrincipalName'] ?? [],
+            "$sourceKey: ePPN not extracted",
+        );
     }
 }

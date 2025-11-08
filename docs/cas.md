@@ -76,10 +76,10 @@ for each value:
 ```php
 'cas' => [
     'attributes' => [
-        'uid' => '/cas:serviceResponse/cas:authenticationSuccess/cas:user',
-        'sn' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:sn',
-        'givenName' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname',
-        'mail' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:mail',
+        'uid' => 'cas:user',
+        'sn' => 'cas:attributes/cas:sn',
+        'givenName' => 'cas:attributes/cas:firstname',
+        'mail' => 'cas:attributes/cas:mail',
     ],
 ],
 ```
@@ -87,7 +87,7 @@ for each value:
 and even some custom attributes if they're set:
 
 ```php
-'customabc' => '/cas:serviceResponse/cas:authenticationSuccess/custom:abc',
+'customabc' => 'custom:abc',
 ```
 
 You'll probably want to avoid querying LDAP for attributes:

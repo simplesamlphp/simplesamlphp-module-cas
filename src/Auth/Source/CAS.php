@@ -11,6 +11,7 @@ use SimpleSAML\CAS\XML\cas\AuthenticationFailure;
 use SimpleSAML\CAS\XML\cas\AuthenticationSuccess;
 use SimpleSAML\CAS\XML\cas\ServiceResponse;
 use SimpleSAML\Configuration;
+use SimpleSAML\Logger;
 use SimpleSAML\Module;
 use SimpleSAML\Module\ldap\Auth\Ldap;
 use SimpleSAML\Utils;
@@ -166,31 +167,7 @@ class CAS extends Auth\Source
                 strval($message->getCode()),
             ));
         } elseif ($message instanceof AuthenticationSuccess) {
-            $user = $message->getUser()->getContent();
-
-            // Build XPath from the same document/node we will query and reuse it.
-            $element = $message->toXML();
-            // Dump the XML we received from the CAS server
-            Logger::debug('CAS client: serviceValidate XML: ' . $element->ownerDocument?->saveXML());
-
-            $xPath = XPath::getXPath($element);
-
-            $attributes = [];
-            if ($casattributes = $this->casConfig['attributes']) {
-                // Some have attributes in the xml - attributes is a list of XPath expressions to get them
-                foreach ($casattributes as $name => $query) {
-                    $attrs = XPath::xpQuery($element, $query, $xPath);
-                    foreach ($attrs as $attrvalue) {
-                        $attributes[$name][] = $attrvalue->textContent;
-                    }
-                    // Log what we parsed for this attribute name
-                    Logger::debug(
-                        sprintf('CAS client: parsed attribute %s => %s', $name, json_encode($attributes[$name] ?? [])),
-                    );
-                }
-            }
-
-            return [$user, $attributes];
+            return $this->parseUserAndAttributes($message);
         }
 
         throw new Exception("Error parsing serviceResponse.");
@@ -295,5 +272,63 @@ class CAS extends Auth\Source
         // we want cas to log us out
         $httpUtils = new Utils\HTTP();
         $httpUtils->redirectTrustedURL($logoutUrl);
+    }
+
+    /**
+     * Extract the CAS user and attributes from an AuthenticationSuccess message.
+     *
+     * @param \SimpleSAML\CAS\XML\cas\AuthenticationSuccess $message
+     * @return array{0: string, 1: array<mixed>}
+     */
+    private function parseUserAndAttributes(AuthenticationSuccess $message): array
+    {
+        $user = $message->getUser()->getContent();
+
+        // Build XPath from the same document/node we will query and reuse it.
+        $element = $message->toXML();
+        // Dump the XML we received from the CAS server
+        Logger::debug('CAS client: serviceValidate XML: ' . $element->ownerDocument?->saveXML());
+
+        $xPath = XPath::getXPath($element);
+
+        $attributes = [];
+        if ($casattributes = $this->casConfig['attributes']) {
+            // Some have attributes in the xml - attributes is a list of XPath expressions to get them
+            foreach ($casattributes as $name => $query) {
+                // If query is an absolute CAS path starting at /cas:serviceResponse/.../cas:authenticationSuccess/,
+                // rewrite it to be relative to the authenticationSuccess element.
+                // Example:
+                //   /cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname
+                //   /cas:serviceResponse/cas:authenticationSuccess/cas:user
+                // becomes:
+                //   cas:attributes/cas:firstname
+                //   cas:user
+                $marker = 'cas:authenticationSuccess/';
+                if (isset($query[0]) && $query[0] === '/') {
+                    $pos = strpos($query, $marker);
+                    if ($pos !== false) {
+                        $originalQuery = $query;
+                        $query = substr($query, $pos + strlen($marker));
+                        Logger::info(sprintf(
+                            'CAS client: rewriting absolute CAS XPath for "%s" from "%s" to relative "%s"',
+                            $name,
+                            $originalQuery,
+                            $query,
+                        ));
+                    }
+                }
+
+                $attrs = XPath::xpQuery($element, $query, $xPath);
+                foreach ($attrs as $attrvalue) {
+                    $attributes[$name][] = $attrvalue->textContent;
+                }
+                // log what we parsed for this attribute name
+                Logger::debug(
+                    sprintf('CAS client: parsed attribute %s => %s', $name, json_encode($attributes[$name] ?? [])),
+                );
+            }
+        }
+
+        return [$user, $attributes];
     }
 }
