@@ -223,8 +223,8 @@ final class CASTest extends TestCase
     public static function casConfigsProvider(): array
     {
         return [
-            ['casserver'],
-            ['casserver_legacy'],
+            "casserver short attribute mapping" => ['casserver'],
+            "casserver legacy/long attribute mapping" => ['casserver_legacy'],
         ];
     }
 

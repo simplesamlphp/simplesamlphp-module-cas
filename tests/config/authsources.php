@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-// phpcs:disable
 $config = [
     'admin' => [
         'core:AdminPassword',
@@ -42,10 +41,10 @@ $config = [
                 'sn' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:sn',
                 'givenName' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname',
                 'mail' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:mail',
+                // phpcs:ignore Generic.Files.LineLength.TooLong
                 'eduPersonPrincipalName' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:eduPersonPrincipalName',
             ],
         ],
         'ldap' => [],
     ],
 ];
-// phpcs:enable
