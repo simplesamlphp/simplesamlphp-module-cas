@@ -1,5 +1,7 @@
-<cas:serviceResponse xmlns:cas="http://www.yale.edu/tp/cas" xmlns:slate="https://example.org/slate">
+<cas:serviceResponse xmlns:cas="http://www.yale.edu/tp/cas"
+                     xmlns:slate="https://example.org/slate">
     <cas:authenticationSuccess>
+        <slate:person>12345_top</slate:person>
         <cas:user>jdoe</cas:user>
         <cas:attributes>
             <cas:authenticationDate>2025-11-07T22:00:24+02:00</cas:authenticationDate>
@@ -9,9 +11,10 @@
             <cas:firstname>John</cas:firstname>
             <cas:mail>jdoe@example.edu</cas:mail>
             <cas:eduPersonPrincipalName>jdoe@example.edu</cas:eduPersonPrincipalName>
+
+            <slate:person>12345</slate:person>
+            <slate:round>Fall-2025</slate:round>
+            <slate:ref>ABC-123</slate:ref>
         </cas:attributes>
-        <slate:person>12345</slate:person>
-        <slate:round>Fall-2025</slate:round>
-        <slate:ref>ABC-123</slate:ref>
     </cas:authenticationSuccess>
 </cas:serviceResponse>

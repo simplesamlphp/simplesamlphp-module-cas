@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Module\cas\Auth\Source;
 
+use DOMDocument;
+use DOMElement;
 use Exception;
 use SimpleSAML\Auth;
 use SimpleSAML\CAS\Utils\XPath;
-use SimpleSAML\CAS\XML\cas\AuthenticationFailure;
-use SimpleSAML\CAS\XML\cas\AuthenticationSuccess;
-use SimpleSAML\CAS\XML\cas\ServiceResponse;
+use SimpleSAML\CAS\XML\AuthenticationFailure;
+use SimpleSAML\CAS\XML\AuthenticationSuccess;
+use SimpleSAML\CAS\XML\ServiceResponse;
 use SimpleSAML\Configuration;
 use SimpleSAML\Logger;
 use SimpleSAML\Module;
@@ -17,7 +19,6 @@ use SimpleSAML\Module\ldap\Auth\Ldap;
 use SimpleSAML\Utils;
 use SimpleSAML\XML\DOMDocumentFactory;
 
-use function array_key_exists;
 use function array_merge_recursive;
 use function preg_split;
 use function strcmp;
@@ -66,6 +67,13 @@ class CAS extends Auth\Source
      */
     private string $loginMethod;
 
+    /**
+     * If enabled, convert all CAS attributes found in the XML:
+     * - cas:NAME => NAME
+     * - OTHERPREFIX:NAME => OTHERPREFIX:NAME
+     * - collect multi-valued elements into arrays of strings
+     */
+//    private bool $convertAllAttributes;
 
     /**
      * Constructor for this authentication source.
@@ -78,16 +86,10 @@ class CAS extends Auth\Source
         // Call the parent constructor first, as required by the interface
         parent::__construct($info, $config);
 
-        if (!array_key_exists('cas', $config)) {
-            throw new Exception('cas authentication source is not properly configured: missing [cas]');
-        }
+        $authsources = Configuration::loadFromArray($config);
 
-        if (!array_key_exists('ldap', $config)) {
-            throw new Exception('ldap authentication source is not properly configured: missing [ldap]');
-        }
-
-        $this->casConfig = $config['cas'];
-        $this->ldapConfig = $config['ldap'];
+        $this->casConfig = $authsources->getValue('cas');
+        $this->ldapConfig = $authsources->getValue('ldap');
 
         if (isset($this->casConfig['serviceValidate'])) {
             $this->validationMethod = 'serviceValidate';
@@ -167,7 +169,16 @@ class CAS extends Auth\Source
                 strval($message->getCode()),
             ));
         } elseif ($message instanceof AuthenticationSuccess) {
-            return $this->parseUserAndAttributes($message);
+            [$user, $attributes] = $this->parseAuthenticationSuccess($message);
+
+            // This will only be parsed if i hae an attribute query. If the configuration
+            // array is empty or not set then an empty array will be returned.
+            $metadata = $this->parseQueryAttributes($dom);
+            if (!empty($metadata)) {
+                $attributes = array_merge_recursive($attributes, $metadata);
+            }
+
+            return [$user, $attributes];
         }
 
         throw new Exception("Error parsing serviceResponse.");
@@ -275,60 +286,117 @@ class CAS extends Auth\Source
     }
 
     /**
-     * Extract the CAS user and attributes from an AuthenticationSuccess message.
+     * Parse a CAS AuthenticationSuccess into a flat associative array.
      *
-     * @param \SimpleSAML\CAS\XML\cas\AuthenticationSuccess $message
-     * @return array{0: string, 1: array<mixed>}
+     * Rules:
+     * - 'user' => content
+     * - For each attribute element (Chunk):
+     *   - If prefix is 'cas' or empty => key is localName
+     *   - Else => key is "prefix:localName"
+     *   - Value is the element's textContent
+     *   - If multiple values for the same key, collect into array
+     *
+     * @return array{
+     *   0: \SimpleSAML\XMLSchema\Type\Interface\ValueTypeInterface,
+     *   1: array<string, list<string>>
+     * }
      */
-    private function parseUserAndAttributes(AuthenticationSuccess $message): array
+    private function parseAuthenticationSuccess(AuthenticationSuccess $message): array
     {
+        /** @var array<string, list<string>> $result */
+        $result = [];
+
+        // user -> content
         $user = $message->getUser()->getContent();
 
-        // Build XPath from the same document/node we will query and reuse it.
-        $element = $message->toXML();
-        // Dump the XML we received from the CAS server
-        Logger::debug('CAS client: serviceValidate XML: ' . $element->ownerDocument?->saveXML());
+        // attributes -> elements (array of SimpleSAML\XML\Chunk)
+        $attributes = $message->getAttributes();
+        /** @var list<\SimpleSAML\XML\Chunk> $elements */
+        $elements = $attributes->getElements();
 
-        $xPath = XPath::getXPath($element);
+        foreach ($elements as $chunk) {
+            // Safely extract localName, prefix, and DOMElement from the Chunk
+            $localName = $chunk->getLocalName();
+            $prefix = $chunk->getPrefix();
+            // DOMElement carrying the actual text content
+            $xmlElement = $chunk->getXML();
 
-        $attributes = [];
-        if ($casattributes = $this->casConfig['attributes']) {
-            // Some have attributes in the xml - attributes is a list of XPath expressions to get them
-            foreach ($casattributes as $name => $query) {
-                // If query is an absolute CAS path starting at /cas:serviceResponse/.../cas:authenticationSuccess/,
-                // rewrite it to be relative to the authenticationSuccess element.
-                // Example:
-                //   /cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname
-                //   /cas:serviceResponse/cas:authenticationSuccess/cas:user
-                // becomes:
-                //   cas:attributes/cas:firstname
-                //   cas:user
-                $marker = 'cas:authenticationSuccess/';
-                if (isset($query[0]) && $query[0] === '/') {
-                    $pos = strpos($query, $marker);
-                    if ($pos !== false) {
-                        $originalQuery = $query;
-                        $query = substr($query, $pos + strlen($marker));
-                        Logger::info(sprintf(
-                            'CAS client: rewriting absolute CAS XPath for "%s" from "%s" to relative "%s"',
-                            $name,
-                            $originalQuery,
-                            $query,
-                        ));
-                    }
-                }
-
-                $attrs = XPath::xpQuery($element, $query, $xPath);
-                foreach ($attrs as $attrvalue) {
-                    $attributes[$name][] = $attrvalue->textContent;
-                }
-                // log what we parsed for this attribute name
-                Logger::debug(
-                    sprintf('CAS client: parsed attribute %s => %s', $name, json_encode($attributes[$name] ?? [])),
-                );
+            if (!$localName || !($xmlElement instanceof DOMElement)) {
+                continue; // skip malformed entries
             }
+
+            // Key selection rule
+            $key = ($prefix === '' || $prefix === 'cas')
+                ? $localName
+                : ($prefix . ':' . $localName);
+
+            $value = trim($xmlElement->textContent ?? '');
+
+            // Collect values (single or multi)
+            $result[$key] ??= [];
+            $result[$key][] = $value;
         }
 
-        return [$user, $attributes];
+        return [$user, $result];
+    }
+
+
+    /**
+     * Parse metadata attributes from CAS response XML using configured XPath queries
+     *
+     * @param DOMDocument $dom The XML document containing CAS response
+     * @return array<string,array<string>> Array of metadata attribute names and values
+     */
+    private function parseQueryAttributes(DOMDocument $dom): array
+    {
+        $root = $dom->documentElement;
+        if (!$root instanceof DOMElement) {
+            return [];
+        }
+
+        $xPath = XPath::getXPath($root);
+
+        $metadata = [];
+        $casattributes = $this->casConfig['attributes'] ?? null;
+        if (!is_array($casattributes)) {
+            return $metadata;
+        }
+
+        // Some have attributes in the xml - attributes is a list of XPath expressions to get them
+        foreach ($casattributes as $name => $query) {
+            // If query is an absolute CAS path starting at /cas:serviceResponse/.../cas:authenticationSuccess/,
+            // rewrite it to be relative to the authenticationSuccess element.
+            // Example:
+            //   /cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname
+            //   /cas:serviceResponse/cas:authenticationSuccess/cas:user
+            // becomes:
+            //   cas:attributes/cas:firstname
+            //   cas:user
+            $marker = 'cas:authenticationSuccess/';
+            if (isset($query[0]) && $query[0] === '/') {
+                $pos = strpos($query, $marker);
+                if ($pos !== false) {
+                    $originalQuery = $query;
+                    $query = substr($query, $pos + strlen($marker));
+                    Logger::info(sprintf(
+                        'CAS client: rewriting absolute CAS XPath for "%s" from "%s" to relative "%s"',
+                        $name,
+                        $originalQuery,
+                        $query,
+                    ));
+                }
+            }
+
+            $attrs = XPath::xpQuery($root, $query, $xPath);
+            foreach ($attrs as $attrvalue) {
+                $metadata[$name][] = $attrvalue->textContent;
+            }
+            // log what we parsed for this metadata name
+            Logger::debug(
+                sprintf('CAS client: parsed metadata %s => %s', $name, json_encode($metadata[$name] ?? [])),
+            );
+        }
+
+        return $metadata;
     }
 }

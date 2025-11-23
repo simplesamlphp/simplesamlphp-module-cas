@@ -8,8 +8,8 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use SimpleSAML\Auth;
-use SimpleSAML\CAS\XML\cas\AuthenticationSuccess;
-use SimpleSAML\CAS\XML\cas\ServiceResponse;
+use SimpleSAML\CAS\XML\AuthenticationSuccess;
+use SimpleSAML\CAS\XML\ServiceResponse;
 use SimpleSAML\Configuration;
 use SimpleSAML\Error;
 use SimpleSAML\HTTP\RunnableResponse;
@@ -60,6 +60,117 @@ final class CASTest extends TestCase
         Configuration::setPreLoadedConfig($this->sourceConfig, 'authsources.php');
     }
 
+    /**
+     * Verify constructor picks serviceValidate and login from the 'casserver' config
+     * (serviceValidate preferred when present).
+     *
+     * @throws \ReflectionException
+     */
+    public function testConstructorUsesServiceValidateWhenPresent(): void
+    {
+        $authsources = Configuration::getConfig('authsources.php')->toArray();
+        self::assertArrayHasKey('casserver', $authsources);
+        $sourceConfig = $authsources['casserver'];
+
+        $cas = new CAS(['AuthId' => 'unit-cas'], $sourceConfig);
+
+        $ref = new \ReflectionClass($cas);
+        $validationMethod = $ref->getProperty('validationMethod');
+        $validationMethod->setAccessible(true);
+        $loginMethod = $ref->getProperty('loginMethod');
+        $loginMethod->setAccessible(true);
+
+        self::assertSame('serviceValidate', $validationMethod->getValue($cas));
+        self::assertSame(
+            'https://ugrad.apply.example.edu/account/cas/login',
+            $loginMethod->getValue($cas),
+        );
+    }
+
+    /**
+     * Verify constructor falls back to validate when serviceValidate is absent
+     * using the 'something' authsource.
+     *
+     * @throws \ReflectionException
+     */
+    public function testConstructorUsesValidateWhenServiceValidateMissing(): void
+    {
+        $authsources = Configuration::getConfig('authsources.php')->toArray();
+        self::assertArrayHasKey('something', $authsources);
+        $sourceConfig = $authsources['something'];
+
+        $cas = new CAS(['AuthId' => 'unit-cas'], $sourceConfig);
+
+        $ref = new \ReflectionClass($cas);
+        $validationMethod = $ref->getProperty('validationMethod');
+        $validationMethod->setAccessible(true);
+        $loginMethod = $ref->getProperty('loginMethod');
+        $loginMethod->setAccessible(true);
+
+        self::assertSame('validate', $validationMethod->getValue($cas));
+        self::assertSame('https://example.org/login', $loginMethod->getValue($cas));
+    }
+
+    /**
+     * When both serviceValidate and validate are present, serviceValidate is preferred.
+     *
+     * @throws \ReflectionException
+     */
+    public function testConstructorPrefersServiceValidateIfBothPresent(): void
+    {
+        $config = [
+            'cas' => [
+                'login' => 'https://example.org/login',
+                'serviceValidate' => 'https://example.org/sv',
+                'validate' => 'https://example.org/v',
+            ],
+            'ldap' => [],
+        ];
+
+        $cas = new CAS(['AuthId' => 'unit-cas'], $config);
+
+        $ref = new \ReflectionClass($cas);
+        $validationMethod = $ref->getProperty('validationMethod');
+        $validationMethod->setAccessible(true);
+
+        self::assertSame('serviceValidate', $validationMethod->getValue($cas));
+    }
+
+    /**
+     * Missing both serviceValidate and validate should throw.
+     */
+    public function testConstructorThrowsIfNoValidationMethodConfigured(): void
+    {
+        $config = [
+            'cas' => [
+                'login' => 'https://example.org/login',
+                // no serviceValidate / validate
+            ],
+            'ldap' => [],
+        ];
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('validate or serviceValidate not specified');
+        new CAS(['AuthId' => 'unit-cas'], $config);
+    }
+
+    /**
+     * Missing login should throw.
+     */
+    public function testConstructorThrowsIfNoLoginConfigured(): void
+    {
+        $config = [
+            'cas' => [
+                'serviceValidate' => 'https://example.org/sv',
+                // no login
+            ],
+            'ldap' => [],
+        ];
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('cas login URL not specified');
+        new CAS(['AuthId' => 'unit-cas'], $config);
+    }
 
     /**
      * Test that request without stateId results in a BadRequest-error
@@ -278,6 +389,8 @@ final class CASTest extends TestCase
 
         self::assertSame('jdoe', $user, "$sourceKey: user mismatch");
         self::assertSame(['jdoe'], $attributes['uid'] ?? [], "$sourceKey: uid not extracted");
+        self::assertSame(['12345'], $attributes['person'] ?? [], "$sourceKey: person not extracted");
+        self::assertSame(['12345_top'], $attributes['person_top'] ?? [], "$sourceKey: person top not extracted");
         self::assertSame(['Doe'], $attributes['sn'] ?? [], "$sourceKey: sn not extracted");
         self::assertSame(['John'], $attributes['givenName'] ?? [], "$sourceKey: givenName not extracted");
         self::assertSame(['jdoe@example.edu'], $attributes['mail'] ?? [], "$sourceKey: mail not extracted");
