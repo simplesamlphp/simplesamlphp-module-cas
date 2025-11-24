@@ -171,11 +171,23 @@ class CAS extends Auth\Source
         } elseif ($message instanceof AuthenticationSuccess) {
             [$user, $attributes] = $this->parseAuthenticationSuccess($message);
 
-            // This will only be parsed if i hae an attribute query. If the configuration
+            // This will only be parsed if i have an attribute query. If the configuration
             // array is empty or not set then an empty array will be returned.
-            $metadata = $this->parseQueryAttributes($dom);
-            if (!empty($metadata)) {
-                $attributes = array_merge_recursive($attributes, $metadata);
+            $attributesFromQueryConfiguration = $this->parseQueryAttributes($dom);
+            if (!empty($attributesFromQueryConfiguration)) {
+              // Overwrite attributes from parseAuthenticationSuccess with configured
+              // XPath-based attributes, instead of combining them.
+                foreach ($attributesFromQueryConfiguration as $name => $values) {
+                    if (!is_array($values)) {
+                        $values = [$values];
+                    }
+
+                  // Ensure a clean, unique list of string values
+                    $values = array_values(array_unique(array_map('strval', $values)));
+
+                  // Configuration wins: replace any existing attribute with the same name
+                    $attributes[$name] = $values;
+                }
             }
 
             return [$user, $attributes];
@@ -337,7 +349,87 @@ class CAS extends Auth\Source
             $result[$key][] = $value;
         }
 
+        // 2) Metadata children from AuthenticationSuccess::getAuthenticationSuccessMetadata()
+        //    (DOMElement instances under cas:authenticationSuccess, outside cas:attributes)
+        //
+        /** @var list<DOMElement> $metaElements */
+        $metaElements = $message->getAuthenticationSuccessMetadata();
+
+        foreach ($metaElements as $element) {
+            if (!$element instanceof DOMElement) {
+                continue;
+            }
+
+            $localName = $element->localName;
+            $prefix    = $element->prefix ?? '';
+
+            if ($localName === null || $localName === '') {
+                continue;
+            }
+
+            // For metadata elements we do NOT special-case 'cas':
+            // we always use "prefix:localName" when there is a prefix,
+            // and just localName when there is none.
+            $key = ($prefix === '')
+                ? $localName
+                : ($prefix . ':' . $localName);
+
+            $value = trim($element->textContent ?? '');
+
+            $result[$key] ??= [];
+            $result[$key][] = $value;
+        }
+
         return [$user, $result];
+    }
+
+    /**
+     * Parse AuthenticationSuccess "metadata" children into a flat associative array.
+     *
+     * Source: AuthenticationSuccess::getAuthenticationSuccessMetadata()
+     * (an array of DOMElement instances under cas:authenticationSuccess,
+     * outside cas:attributes).
+     *
+     * Rules:
+     * - If element prefix is 'cas' or empty => key is localName
+     * - Else => key is "prefix:localName"
+     * - Value is element's textContent (trimmed)
+     * - If multiple elements resolve to the same key, collect all values in an array
+     *
+     * @return array<string, list<string>>
+     */
+    private function parseAuthenticationSuccessMetadata(AuthenticationSuccess $message): array
+    {
+        /** @var array<string, list<string>> $result */
+        $result = [];
+
+        /** @var list<DOMElement> $metaElements */
+        $metaElements = $message->getAuthenticationSuccessMetadata();
+
+        foreach ($metaElements as $element) {
+            if (!$element instanceof DOMElement) {
+                continue;
+            }
+
+            $localName = $element->localName;
+            $prefix    = $element->prefix ?? '';
+
+            if ($localName === null || $localName === '') {
+                continue;
+            }
+
+            // Same keying rule as for attribute Chunks
+            $key = ($prefix === '' || $prefix === 'cas')
+                ? $localName
+                : ($prefix . ':' . $localName);
+
+            $value = trim($element->textContent ?? '');
+
+            $result[$key] ??= [];
+            $result[$key][] = $value;
+        }
+
+        return $result;
     }
 
 
@@ -354,7 +446,7 @@ class CAS extends Auth\Source
             return [];
         }
 
-        $xPath = XPath::getXPath($root);
+        $xPath = XPath::getXPath($root, true);
 
         $metadata = [];
         $casattributes = $this->casConfig['attributes'] ?? null;
@@ -362,39 +454,46 @@ class CAS extends Auth\Source
             return $metadata;
         }
 
+        /** @var list<\DOMElement> $authnNodes */
+        $authnNodes = XPath::xpQuery($root, 'cas:authenticationSuccess', $xPath);
+        /** @var \DOMElement|null $authn */
+        $authn = $authnNodes[0] ?? null;
+
         // Some have attributes in the xml - attributes is a list of XPath expressions to get them
         foreach ($casattributes as $name => $query) {
-            // If query is an absolute CAS path starting at /cas:serviceResponse/.../cas:authenticationSuccess/,
-            // rewrite it to be relative to the authenticationSuccess element.
-            // Example:
-            //   /cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname
-            //   /cas:serviceResponse/cas:authenticationSuccess/cas:user
-            // becomes:
-            //   cas:attributes/cas:firstname
-            //   cas:user
             $marker = 'cas:authenticationSuccess/';
+
             if (isset($query[0]) && $query[0] === '/') {
-                $pos = strpos($query, $marker);
-                if ($pos !== false) {
+                // Absolute XPath
+                if (strpos($query, $marker) !== false && $authn instanceof \DOMElement) {
                     $originalQuery = $query;
-                    $query = substr($query, $pos + strlen($marker));
+                    $query = substr($query, strpos($query, $marker) + strlen($marker));
                     Logger::info(sprintf(
                         'CAS client: rewriting absolute CAS XPath for "%s" from "%s" to relative "%s"',
                         $name,
                         $originalQuery,
                         $query,
                     ));
+                    $nodes = XPath::xpQuery($authn, $query, $xPath);
+                } else {
+                    // Keep absolute; evaluate from document root
+                    $nodes = XPath::xpQuery($root, $query, $xPath);
                 }
+            } else {
+                // Relative XPath; prefer evaluating under authenticationSuccess if available
+                $context = $authn instanceof \DOMElement ? $authn : $root;
+                $nodes = XPath::xpQuery($context, $query, $xPath);
             }
 
-            $attrs = XPath::xpQuery($root, $query, $xPath);
-            foreach ($attrs as $attrvalue) {
-                $metadata[$name][] = $attrvalue->textContent;
+            foreach ($nodes as $n) {
+                $metadata[$name][] = trim($n->textContent);
             }
-            // log what we parsed for this metadata name
-            Logger::debug(
-                sprintf('CAS client: parsed metadata %s => %s', $name, json_encode($metadata[$name] ?? [])),
-            );
+
+            Logger::debug(sprintf(
+                'CAS client: parsed metadata %s => %s',
+                $name,
+                json_encode($metadata[$name] ?? []),
+            ));
         }
 
         return $metadata;

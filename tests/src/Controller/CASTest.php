@@ -185,8 +185,11 @@ final class CASTest extends TestCase
         $c = new Controller\CAS($this->config);
 
         $this->expectException(Error\BadRequest::class);
-        $this->expectExceptionMessage("BADREQUEST('%REASON%' => 'Missing stateId parameter.')");
-
+        $errorResponse = [
+            'errorCode' => 'BADREQUEST',
+            '%REASON%' => 'Missing stateId parameter.',
+        ];
+        $this->expectExceptionMessage(json_encode($errorResponse, JSON_THROW_ON_ERROR));
         $c->linkback($request);
     }
 
@@ -231,7 +234,11 @@ final class CASTest extends TestCase
         });
 
         $this->expectException(Error\BadRequest::class);
-        $this->expectExceptionMessage("BADREQUEST('%REASON%' => 'Missing ticket parameter.')");
+        $errorResponse = [
+            'errorCode' => 'BADREQUEST',
+            '%REASON%' => 'Missing ticket parameter.',
+        ];
+        $this->expectExceptionMessage(json_encode($errorResponse, JSON_THROW_ON_ERROR));
 
         $c->linkback($request);
     }
@@ -378,26 +385,144 @@ final class CASTest extends TestCase
         // Instantiate the CAS source with the selected configuration
         $cas = new Cas(['AuthId' => 'unit-cas'], $sourceConfig);
 
-        // Invoke the private parseUserAndAttributes() method via reflection
-        $refMethod = new \ReflectionMethod(Cas::class, 'parseUserAndAttributes');
-        $refMethod->setAccessible(true);
-        /** @var array{0:string,1:array<string,array<int,string>>} $result */
-        $result = $refMethod->invoke($cas, $message);
+        // Invoke the new private methods via reflection
+        $ref = new \ReflectionClass(Cas::class);
+
+        $parseAuthSuccess = $ref->getMethod('parseAuthenticationSuccess');
+        $parseAuthSuccess->setAccessible(true);
+        /** @var array{0:string,1:array<string,list<string>>} $userAndAttrs */
+        $userAndAttrs = $parseAuthSuccess->invoke($cas, $message);
+
+        $parseQueryAttrs = $ref->getMethod('parseQueryAttributes');
+        $parseQueryAttrs->setAccessible(true);
+        /** @var array<string,list<string>> $queryAttrs */
+        $queryAttrs = $parseQueryAttrs->invoke($cas, $dom);
+
+        // Merge attribute arrays (values are lists)
+        [$user, $elementAttrs] = $userAndAttrs;
+        // Normalize user to a plain string (may be a StringValue-like object)
+        $user = strval($user);
+
+        /** @var array<string,list<string>> $attributes */
+        $attributes = $elementAttrs;
+        foreach ($queryAttrs as $k => $vals) {
+            if (!isset($attributes[$k])) {
+                $attributes[$k] = [];
+            }
+            // Append preserving order
+            foreach ($vals as $v) {
+                $attributes[$k][] = $v;
+            }
+        }
 
         // Assert user and attributes are identical for both configurations
-        [$user, $attributes] = $result;
-
         self::assertSame('jdoe', $user, "$sourceKey: user mismatch");
-        self::assertSame(['jdoe'], $attributes['uid'] ?? [], "$sourceKey: uid not extracted");
-        self::assertSame(['12345'], $attributes['person'] ?? [], "$sourceKey: person not extracted");
-        self::assertSame(['12345_top'], $attributes['person_top'] ?? [], "$sourceKey: person top not extracted");
-        self::assertSame(['Doe'], $attributes['sn'] ?? [], "$sourceKey: sn not extracted");
-        self::assertSame(['John'], $attributes['givenName'] ?? [], "$sourceKey: givenName not extracted");
-        self::assertSame(['jdoe@example.edu'], $attributes['mail'] ?? [], "$sourceKey: mail not extracted");
+        //phpcs:ignore Generic.Files.LineLength.TooLong
+        self::assertSame('12345', array_pop($attributes['person']) ?? '', "$sourceKey: person not extracted");
+        //phpcs:ignore Generic.Files.LineLength.TooLong
+        self::assertSame('12345_top', array_pop($attributes['person_top']) ?? '', "$sourceKey: person top not extracted");
+        //phpcs:ignore Generic.Files.LineLength.TooLong
+        self::assertSame('Doe', array_pop($attributes['sn']) ?? '', "$sourceKey: sn not extracted");
+        //phpcs:ignore Generic.Files.LineLength.TooLong
+        self::assertSame('John', array_pop($attributes['givenName']) ?? '', "$sourceKey: givenName not extracted");
+        //phpcs:ignore Generic.Files.LineLength.TooLong
+        self::assertSame('jdoe@example.edu', array_pop($attributes['mail']) ?? '', "$sourceKey: mail not extracted");
+        //phpcs:ignore Generic.Files.LineLength.TooLong
+        self::assertSame('jdoe@example.edu', array_pop($attributes['eduPersonPrincipalName']) ?? '', "$sourceKey: ePPN not extracted",);
+    }
+
+    /**
+     * Ensure that for casserver attributes configuration and the slate CAS response,
+     * the attributes built from the AuthenticationSuccess model match
+     * exactly those extracted via XPath configuration: same keys,
+     * same values (per key), and same total count.
+     */
+    public function testCasserverAutoMapAttributesMatchBetweenModelAndXPath(): void
+    {
+        // Load authsources and retrieve casserver_auto_map configuration
+        $authsources = Configuration::getConfig('authsources.php');
+        $config = $authsources->toArray();
+
+        self::assertIsArray($config, 'authsources.php did not return expected $config array');
+        self::assertArrayHasKey(
+            'casserver_auto_map',
+            $config,
+            "Missing source 'casserver_auto_map' in authsources.php",
+        );
+        $sourceConfig = $config['casserver_auto_map'];
+        self::assertArrayHasKey('cas', $sourceConfig, "Missing 'cas' config for 'casserver_auto_map'");
+        self::assertArrayHasKey('ldap', $sourceConfig, "Missing 'ldap' config for 'casserver_auto_map'");
+
+        // Load the CAS success message XML (slate variant)
+        $successXmlFile = dirname(__DIR__, 1) . '/../response/cas-success-service-response-slate.xml';
+        self::assertFileExists($successXmlFile, 'Slate CAS success XML not found at expected path');
+
+        $dom = DOMDocumentFactory::fromFile($successXmlFile);
+        $root = $dom->documentElement;
+        if (!$root instanceof \DOMElement) {
+            self::fail('Loaded slate XML does not have a document element');
+        }
+
+        // Build AuthenticationSuccess message from XML
+        $serviceResponse = ServiceResponse::fromXML($root);
+        $message = $serviceResponse->getResponse();
+        self::assertInstanceOf(
+            AuthenticationSuccess::class,
+            $message,
+            'Expected AuthenticationSuccess message for slate XML',
+        );
+
+        // Instantiate the CAS source with casserver_auto_map configuration
+        $cas = new Cas(['AuthId' => 'unit-cas'], $sourceConfig);
+
+        // Use reflection to access the private parsers
+        $ref = new \ReflectionClass(Cas::class);
+
+        $parseAuthSuccess = $ref->getMethod('parseAuthenticationSuccess');
+        $parseAuthSuccess->setAccessible(true);
+        /** @var array{0:mixed,1:array<string,list<string>>} $userAndModelAttrs */
+        $userAndModelAttrs = $parseAuthSuccess->invoke($cas, $message);
+
+        $parseQueryAttrs = $ref->getMethod('parseQueryAttributes');
+        $parseQueryAttrs->setAccessible(true);
+        /** @var array<string,list<string>> $xpathAttrs */
+        $xpathAttrs = $parseQueryAttrs->invoke($cas, $dom);
+
+        [, $modelAttrs] = $userAndModelAttrs;
+
+        // Normalize both maps: sort keys and sort values within each key
+        ksort($modelAttrs);
+        ksort($xpathAttrs);
+
+        foreach ($modelAttrs as $k => &$vals) {
+            sort($vals);
+        }
+        unset($vals);
+
+        foreach ($xpathAttrs as $k => &$vals) {
+            sort($vals);
+        }
+        unset($vals);
+
+        // Assert same number of attributes
+        self::assertCount(
+            count($modelAttrs),
+            $xpathAttrs,
+            'Attribute count mismatch between model and XPath extraction',
+        );
+
+        // Assert same keys
         self::assertSame(
-            ['jdoe@example.edu'],
-            $attributes['eduPersonPrincipalName'] ?? [],
-            "$sourceKey: ePPN not extracted",
+            array_keys($modelAttrs),
+            array_keys($xpathAttrs),
+            'Attribute keys mismatch between model and XPath extraction',
+        );
+
+        // Assert same values per key
+        self::assertSame(
+            $modelAttrs,
+            $xpathAttrs,
+            'Attribute values mismatch between model and XPath extraction',
         );
     }
 }

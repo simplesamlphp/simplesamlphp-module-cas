@@ -21,7 +21,7 @@ $config = [
             'serviceValidate' => 'https://ugrad.apply.example.edu/account/cas/serviceValidate',
             'logout' => 'https://ugrad.apply.example.edu/account/cas/logout',
             'attributes' => [
-                'uid' => 'cas:user',
+                'user' => 'cas:user',
                 // target the intended person under cas:attributes
                 'person' => 'cas:attributes/slate:person',
                 // if you still want to capture the top-level one, keep a separate key:
@@ -41,7 +41,7 @@ $config = [
             'serviceValidate' => 'https://ugrad.apply.example.edu/account/cas/serviceValidate',
             'logout' => 'https://ugrad.apply.example.edu/account/cas/logout',
             'attributes' => [
-                'uid' => '/cas:serviceResponse/cas:authenticationSuccess/cas:user',
+                'user' => '/cas:serviceResponse/cas:authenticationSuccess/cas:user',
                 // target the intended person under cas:attributes
                 'person' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/slate:person',
                 // if you still want to capture the top-level one, keep a separate key:
@@ -61,6 +61,20 @@ $config = [
             'login' => 'https://ugrad.apply.example.edu/account/cas/login',
             'serviceValidate' => 'https://ugrad.apply.example.edu/account/cas/serviceValidate',
             'logout' => 'https://ugrad.apply.example.edu/account/cas/logout',
+            'attributes' => [
+                // CAS core identifier
+                'user'        => 'cas:user',
+
+                // Top-level slate elements under cas:authenticationSuccess
+                'slate:person'=> 'slate:person',
+                'slate:round' => 'slate:round',
+                'slate:ref'   => 'slate:ref',
+
+                // Attributes inside <cas:attributes>…
+                'firstname'   => 'cas:attributes/cas:firstname',
+                'lastname'    => 'cas:attributes/cas:lastname',
+                'email'       => 'cas:attributes/cas:email',
+            ],
         ],
         'ldap' => [],
     ],
