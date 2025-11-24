@@ -66,7 +66,7 @@ $config = [
                 'user'        => 'cas:user',
 
                 // Top-level slate elements under cas:authenticationSuccess
-                'slate:person'=> 'slate:person',
+                'slate:person' => 'slate:person',
                 'slate:round' => 'slate:round',
                 'slate:ref'   => 'slate:ref',
 

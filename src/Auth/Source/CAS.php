@@ -308,6 +308,7 @@ class CAS extends Auth\Source
      *   - Value is the element's textContent
      *   - If multiple values for the same key, collect into array
      *
+     * @param \SimpleSAML\CAS\XML\AuthenticationSuccess $message The authentication success message to parse
      * @return array{
      *   0: \SimpleSAML\XMLSchema\Type\Interface\ValueTypeInterface,
      *   1: array<string, list<string>>
@@ -349,10 +350,23 @@ class CAS extends Auth\Source
             $result[$key][] = $value;
         }
 
-        // 2) Metadata children from AuthenticationSuccess::getAuthenticationSuccessMetadata()
-        //    (DOMElement instances under cas:authenticationSuccess, outside cas:attributes)
-        //
-        /** @var list<DOMElement> $metaElements */
+        // Metadata children from AuthenticationSuccess::getAuthenticationSuccessMetadata()
+        // (DOMElement instances under cas:authenticationSuccess, outside cas:attributes)
+        $this->parseAuthenticationSuccessMetadata($message, $result);
+
+        return [$user, $result];
+    }
+
+
+    /**
+     * Parse metadata elements from AuthenticationSuccess message and add them to attributes array
+     *
+     * @param \SimpleSAML\CAS\XML\AuthenticationSuccess $message The authentication success message
+     * @param array<string,list<string>> &$attributes Reference to attributes array to update
+     * @return void
+     */
+    private function parseAuthenticationSuccessMetadata(AuthenticationSuccess $message, array &$attributes): void
+    {
         $metaElements = $message->getAuthenticationSuccessMetadata();
 
         foreach ($metaElements as $element) {
@@ -376,60 +390,9 @@ class CAS extends Auth\Source
 
             $value = trim($element->textContent ?? '');
 
-            $result[$key] ??= [];
-            $result[$key][] = $value;
+            $attributes[$key] ??= [];
+            $attributes[$key][] = $value;
         }
-
-        return [$user, $result];
-    }
-
-    /**
-     * Parse AuthenticationSuccess "metadata" children into a flat associative array.
-     *
-     * Source: AuthenticationSuccess::getAuthenticationSuccessMetadata()
-     * (an array of DOMElement instances under cas:authenticationSuccess,
-     * outside cas:attributes).
-     *
-     * Rules:
-     * - If element prefix is 'cas' or empty => key is localName
-     * - Else => key is "prefix:localName"
-     * - Value is element's textContent (trimmed)
-     * - If multiple elements resolve to the same key, collect all values in an array
-     *
-     * @return array<string, list<string>>
-     */
-    private function parseAuthenticationSuccessMetadata(AuthenticationSuccess $message): array
-    {
-        /** @var array<string, list<string>> $result */
-        $result = [];
-
-        /** @var list<DOMElement> $metaElements */
-        $metaElements = $message->getAuthenticationSuccessMetadata();
-
-        foreach ($metaElements as $element) {
-            if (!$element instanceof DOMElement) {
-                continue;
-            }
-
-            $localName = $element->localName;
-            $prefix    = $element->prefix ?? '';
-
-            if ($localName === null || $localName === '') {
-                continue;
-            }
-
-            // Same keying rule as for attribute Chunks
-            $key = ($prefix === '' || $prefix === 'cas')
-                ? $localName
-                : ($prefix . ':' . $localName);
-
-            $value = trim($element->textContent ?? '');
-
-            $result[$key] ??= [];
-            $result[$key][] = $value;
-        }
-
-        return $result;
     }
 
 

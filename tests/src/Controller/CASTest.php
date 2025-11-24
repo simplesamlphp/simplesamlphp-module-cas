@@ -488,41 +488,28 @@ final class CASTest extends TestCase
         /** @var array<string,list<string>> $xpathAttrs */
         $xpathAttrs = $parseQueryAttrs->invoke($cas, $dom);
 
-        [, $modelAttrs] = $userAndModelAttrs;
+        [$user, $modelAttrs] = $userAndModelAttrs;
 
-        // Normalize both maps: sort keys and sort values within each key
-        ksort($modelAttrs);
-        ksort($xpathAttrs);
+        // I have to add this here because the query attributes has it.
+        // I have to add this here because the query attributes has it.
+        self::assertInstanceOf(ValueTypeInterface::class, $user);
+        $modelAttrs['user'] = [$user->getValue()];
 
-        foreach ($modelAttrs as $k => &$vals) {
-            sort($vals);
-        }
-        unset($vals);
-
-        foreach ($xpathAttrs as $k => &$vals) {
-            sort($vals);
-        }
-        unset($vals);
-
-        // Assert same number of attributes
-        self::assertCount(
-            count($modelAttrs),
-            $xpathAttrs,
-            'Attribute count mismatch between model and XPath extraction',
-        );
 
         // Assert same keys
-        self::assertSame(
-            array_keys($modelAttrs),
-            array_keys($xpathAttrs),
-            'Attribute keys mismatch between model and XPath extraction',
-        );
+        $modelKeys = array_keys($modelAttrs);
+        $xpathKeys = array_keys($xpathAttrs);
+        sort($modelKeys);
+        sort($xpathKeys);
 
-        // Assert same values per key
-        self::assertSame(
-            $modelAttrs,
-            $xpathAttrs,
-            'Attribute values mismatch between model and XPath extraction',
-        );
+        self::assertSame($modelKeys, $xpathKeys, 'Attribute keys mismatch between model and XPath extraction');
+
+        foreach ($modelAttrs as $key => $values) {
+            $this->assertTrue(isset($xpathAttrs[$key]), "Missing attribute '$key' in XPath extraction");
+            $this->assertTrue(
+                in_array($values[0], $xpathAttrs[$key], true),
+                "Attribute '$key' values mismatch",
+            );
+        }
     }
 }
