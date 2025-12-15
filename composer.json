@@ -36,20 +36,43 @@
     "require": {
         "php": "^8.2",
         "ext-pcre": "*",
+        "ext-dom": "*",
 
         "simplesamlphp/assert": "^1.9",
         "simplesamlphp/composer-module-installer": "^1.4",
-        "simplesamlphp/simplesamlphp": "~2.4",
+        "simplesamlphp/simplesamlphp": "dev-simplesamlphp-2.5 as v2.5.x-dev",
         "simplesamlphp/simplesamlphp-module-ldap": "~1.2",
-        "simplesamlphp/xml-cas": "^2.0",
-        "simplesamlphp/xml-common": "^2.0",
-        "symfony/http-foundation": "^6.4 || ^7.3"
+        "simplesamlphp/xml-cas-module-slate": "~1.1.0",
+        "simplesamlphp/xml-cas": "^v2.2.0",
+        "simplesamlphp/xml-common": "~2.4.0",
+        "symfony/http-foundation": "~7.4.0"
     },
     "require-dev": {
-        "simplesamlphp/simplesamlphp-test-framework": "^1.10"
+        "simplesamlphp/simplesamlphp-test-framework": "^1.10",
+        "phpunit/phpunit": "^11",
+        "icanhazstring/composer-unused": "^0.9.5",
+        "squizlabs/php_codesniffer": "^4.0.0",
+        "phpstan/phpstan": "^2.1.33",
+        "maglnet/composer-require-checker": "^4"
     },
     "support": {
         "issues": "https://github.com/simplesamlphp/simplesamlphp-module-cas/issues",
         "source": "https://github.com/simplesamlphp/simplesamlphp-module-cas"
+    },
+    "scripts": {
+        "pre-commit": [
+            "vendor/bin/phpcs -p",
+            "vendor/bin/composer-require-checker check --config-file=tools/composer-require-checker.json composer.json",
+            "vendor/bin/phpstan analyze -c phpstan.neon",
+            "vendor/bin/phpstan analyze -c phpstan-dev.neon",
+            "vendor/bin/composer-unused",
+            "vendor/bin/phpunit --no-coverage --testdox"
+        ],
+        "tests": [
+            "vendor/bin/phpunit --no-coverage"
+        ],
+        "propose-fix": [
+            "vendor/bin/phpcs --report=diff"
+        ]
     }
 }
