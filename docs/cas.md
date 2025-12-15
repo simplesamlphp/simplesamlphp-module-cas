@@ -51,13 +51,12 @@ Or you might have to call serviceValidate for Protocol 3 via **/p3/**:
 ]
 ```
 
-
 ### Optional: Enabling Slate extensions
 
 Some deployments include vendor‑specific fields (for example `slate:*`) in CAS responses.
 You can opt in to Slate support:
 
-```php 
+```php
 'cas' => [
     // ...
     'serviceValidate' => 'https://cas.example.com/p3/serviceValidate',
