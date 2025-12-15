@@ -50,12 +50,12 @@ class CAS extends Auth\Source
 
 
     /**
-     * @var array<mixed> with ldap configuration
+     * @var array<string, mixed> with ldap configuration
      */
     private array $ldapConfig;
 
     /**
-     * @var array<mixed> cas configuration
+     * @var array<string, mixed> cas configuration
      */
     private array $casConfig;
 
@@ -75,6 +75,12 @@ class CAS extends Auth\Source
      */
     private bool $useSlate;
 
+    /**
+     * HTTP utility class for making requests and handling redirects.
+     * @var \SimpleSAML\Utils\HTTP
+     */
+    private Utils\HTTP $httpUtils;
+
 
     /**
      * Constructor for this authentication source.
@@ -89,8 +95,8 @@ class CAS extends Auth\Source
 
         $authsources = Configuration::loadFromArray($config);
 
-        $this->casConfig = $authsources->getValue('cas');
-        $this->ldapConfig = $authsources->getValue('ldap');
+        $this->casConfig = (array)$authsources->getValue('cas');
+        $this->ldapConfig = (array)$authsources->getValue('ldap');
 
         if (isset($this->casConfig['serviceValidate'])) {
             $this->validationMethod = 'serviceValidate';
@@ -111,6 +117,22 @@ class CAS extends Auth\Source
 
 
     /**
+     * Initialize HTTP utilities instance
+     *
+     * @param \SimpleSAML\Utils\HTTP|null $httpUtils Optional HTTP utilities instance to use
+     * @return void
+     */
+    protected function initHttpUtils(Utils\HTTP $httpUtils = null): void
+    {
+        if ($httpUtils !== null) {
+            $this->httpUtils = $httpUtils;
+        } else {
+            $this->httpUtils = $this->httpUtils ?? new Utils\HTTP();
+        }
+    }
+
+
+    /**
      * This the most simple version of validating, this provides only authentication validation
      *
      * @param string $ticket
@@ -120,17 +142,17 @@ class CAS extends Auth\Source
      */
     private function casValidate(string $ticket, string $service): array
     {
-        $httpUtils = new Utils\HTTP();
-        $url = $httpUtils->addURLParameters($this->casConfig['validate'], [
+        $this->initHttpUtils();
+        $url = $this->httpUtils->addURLParameters($this->casConfig['validate'], [
             'ticket' => $ticket,
             'service' => $service,
         ]);
 
         /** @var string $result */
-        $result = $httpUtils->fetch($url);
+        $result = $this->httpUtils->fetch($url);
 
-        /** @var list<array{string, int<0, max>}|string> $res */
-        $res = preg_split("/\r?\n/", $result);
+        /** @var list<string> $res */
+        $res = preg_split("/\r?\n/", $result) ?: [];
 
         if (strcmp($res[0], "yes") == 0) {
             return [$res[1], []];
@@ -150,18 +172,22 @@ class CAS extends Auth\Source
      */
     private function casServiceValidate(string $ticket, string $service): array
     {
-        $httpUtils = new Utils\HTTP();
-        $url = $httpUtils->addURLParameters(
+        $this->initHttpUtils();
+        $url = $this->httpUtils->addURLParameters(
             $this->casConfig['serviceValidate'],
             [
                 'ticket' => $ticket,
                 'service' => $service,
             ],
         );
-        $result = $httpUtils->fetch($url);
+        $result = $this->httpUtils->fetch($url);
 
         /** @var string $result */
         $dom = DOMDocumentFactory::fromString($result);
+
+        if ($dom->documentElement === null) {
+            return [];
+        }
 
         if ($this->useSlate) {
             $serviceResponse = SlateServiceResponse::fromXML($dom->documentElement);
@@ -272,8 +298,8 @@ class CAS extends Auth\Source
 
         $serviceUrl = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
 
-        $httpUtils = new Utils\HTTP();
-        $httpUtils->redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
+        $this->initHttpUtils();
+        $this->httpUtils->redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
     }
 
 
@@ -297,8 +323,8 @@ class CAS extends Auth\Source
         Auth\State::deleteState($state);
 
         // we want cas to log us out
-        $httpUtils = new Utils\HTTP();
-        $httpUtils->redirectTrustedURL($logoutUrl);
+        $this->initHttpUtils();
+        $this->httpUtils->redirectTrustedURL($logoutUrl);
     }
 
 
@@ -457,7 +483,7 @@ class CAS extends Auth\Source
                 }
             } else {
                 // Relative XPath; prefer evaluating under authenticationSuccess if available
-                $context = $authn instanceof \DOMElement ? $authn : $root;
+                $context = $authn instanceof DOMElement ? $authn : $root;
                 $nodes = XPath::xpQuery($context, $query, $xPath);
             }
 
