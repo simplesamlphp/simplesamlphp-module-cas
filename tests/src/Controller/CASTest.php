@@ -10,12 +10,16 @@ use PHPUnit\Framework\TestCase;
 use SimpleSAML\Auth;
 use SimpleSAML\CAS\XML\AuthenticationSuccess;
 use SimpleSAML\CAS\XML\ServiceResponse;
+use SimpleSAML\CAS\XML\ServiceResponse as CasServiceResponse;
 use SimpleSAML\Configuration;
 use SimpleSAML\Error;
 use SimpleSAML\HTTP\RunnableResponse;
 use SimpleSAML\Module\cas\Auth\Source\CAS;
 use SimpleSAML\Module\cas\Controller;
+use SimpleSAML\Slate\XML\AuthenticationSuccess as SlateAuthenticationSuccess;
+use SimpleSAML\Slate\XML\ServiceResponse as SlateServiceResponse;
 use SimpleSAML\XML\DOMDocumentFactory;
+use SimpleSAML\XMLSchema\Type\Interface\ValueTypeInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -60,6 +64,7 @@ final class CASTest extends TestCase
         Configuration::setPreLoadedConfig($this->sourceConfig, 'authsources.php');
     }
 
+
     /**
      * Verify constructor picks serviceValidate and login from the 'casserver' config
      * (serviceValidate preferred when present).
@@ -87,6 +92,7 @@ final class CASTest extends TestCase
         );
     }
 
+
     /**
      * Verify constructor falls back to validate when serviceValidate is absent
      * using the 'something' authsource.
@@ -110,6 +116,7 @@ final class CASTest extends TestCase
         self::assertSame('validate', $validationMethod->getValue($cas));
         self::assertSame('https://example.org/login', $loginMethod->getValue($cas));
     }
+
 
     /**
      * When both serviceValidate and validate are present, serviceValidate is preferred.
@@ -136,6 +143,7 @@ final class CASTest extends TestCase
         self::assertSame('serviceValidate', $validationMethod->getValue($cas));
     }
 
+
     /**
      * Missing both serviceValidate and validate should throw.
      */
@@ -154,6 +162,7 @@ final class CASTest extends TestCase
         new CAS(['AuthId' => 'unit-cas'], $config);
     }
 
+
     /**
      * Missing login should throw.
      */
@@ -171,6 +180,7 @@ final class CASTest extends TestCase
         $this->expectExceptionMessage('cas login URL not specified');
         new CAS(['AuthId' => 'unit-cas'], $config);
     }
+
 
     /**
      * Test that request without stateId results in a BadRequest-error
@@ -330,8 +340,13 @@ final class CASTest extends TestCase
         });
 
         $result = $c->linkback($request);
+        /*
+         * @var mixed $result
+         * @phpstan-ignore method.alreadyNarrowedType
+         */
         $this->assertInstanceOf(RunnableResponse::class, $result);
     }
+
 
     /**
      * Provide both CAS configs: relative (casserver) and absolute (casserver_legacy).
@@ -358,9 +373,9 @@ final class CASTest extends TestCase
         $authsources = Configuration::getConfig('authsources.php');
         $config = $authsources->toArray();
 
-        self::assertIsArray($config, 'authsources.php did not return expected $config array');
         self::assertArrayHasKey($sourceKey, $config, "Missing source '$sourceKey' in authsources.php");
         $sourceConfig = $config[$sourceKey];
+        /** @var array<mixed> $sourceConfig */
         self::assertArrayHasKey('cas', $sourceConfig, "Missing 'cas' config for '$sourceKey'");
         self::assertArrayHasKey('ldap', $sourceConfig, "Missing 'ldap' config for '$sourceKey'");
 
@@ -377,7 +392,7 @@ final class CASTest extends TestCase
         $serviceResponse = ServiceResponse::fromXML($root);
         $message = $serviceResponse->getResponse();
         self::assertInstanceOf(
-            AuthenticationSuccess::class,
+            \SimpleSAML\CAS\XML\AuthenticationSuccess::class,
             $message,
             'Expected AuthenticationSuccess message',
         );
@@ -431,6 +446,7 @@ final class CASTest extends TestCase
         self::assertSame('jdoe@example.edu', array_pop($attributes['eduPersonPrincipalName']) ?? '', "$sourceKey: ePPN not extracted",);
     }
 
+
     /**
      * Ensure that for casserver attributes configuration and the slate CAS response,
      * the attributes built from the AuthenticationSuccess model match
@@ -443,13 +459,14 @@ final class CASTest extends TestCase
         $authsources = Configuration::getConfig('authsources.php');
         $config = $authsources->toArray();
 
-        self::assertIsArray($config, 'authsources.php did not return expected $config array');
         self::assertArrayHasKey(
             'casserver_auto_map',
             $config,
             "Missing source 'casserver_auto_map' in authsources.php",
         );
         $sourceConfig = $config['casserver_auto_map'];
+        /** @var array<mixed> $sourceConfig */
+
         self::assertArrayHasKey('cas', $sourceConfig, "Missing 'cas' config for 'casserver_auto_map'");
         self::assertArrayHasKey('ldap', $sourceConfig, "Missing 'ldap' config for 'casserver_auto_map'");
 
@@ -463,20 +480,23 @@ final class CASTest extends TestCase
             self::fail('Loaded slate XML does not have a document element');
         }
 
-        // Build AuthenticationSuccess message from XML
-        $serviceResponse = ServiceResponse::fromXML($root);
+        $isSlateEnabled = $sourceConfig['cas']['slate.enabled'] ?? false;
+        // Build AuthenticationSuccess message from XML.
+        // With xml-cas-module-slate installed, this will be a SlateAuthenticationSuccess instance.
+        $serviceResponse = $isSlateEnabled ? SlateServiceResponse::fromXML($root) : CasServiceResponse::fromXML($root);
+
         $message = $serviceResponse->getResponse();
         self::assertInstanceOf(
-            AuthenticationSuccess::class,
+            $isSlateEnabled ? SlateAuthenticationSuccess::class : AuthenticationSuccess::class,
             $message,
-            'Expected AuthenticationSuccess message for slate XML',
+            'Expected SlateAuthenticationSuccess message for slate XML',
         );
 
         // Instantiate the CAS source with casserver_auto_map configuration
-        $cas = new Cas(['AuthId' => 'unit-cas'], $sourceConfig);
+        $cas = new CAS(['AuthId' => 'unit-cas'], $sourceConfig);
 
         // Use reflection to access the private parsers
-        $ref = new \ReflectionClass(Cas::class);
+        $ref = new \ReflectionClass(CAS::class);
 
         $parseAuthSuccess = $ref->getMethod('parseAuthenticationSuccess');
         $parseAuthSuccess->setAccessible(true);
@@ -490,11 +510,8 @@ final class CASTest extends TestCase
 
         [$user, $modelAttrs] = $userAndModelAttrs;
 
-        // I have to add this here because the query attributes has it.
-        // I have to add this here because the query attributes has it.
         self::assertInstanceOf(ValueTypeInterface::class, $user);
         $modelAttrs['user'] = [$user->getValue()];
-
 
         // Assert same keys
         $modelKeys = array_keys($modelAttrs);

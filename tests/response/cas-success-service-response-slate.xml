@@ -7,9 +7,6 @@
         <slate:round>Regular Decision</slate:round>
         <slate:ref>774482874</slate:ref>
         <cas:attributes>
-            <cas:authenticationDate>2025-11-07T22:00:24+02:00</cas:authenticationDate>
-            <cas:longTermAuthenticationRequestTokenUsed>true</cas:longTermAuthenticationRequestTokenUsed>
-            <cas:isFromNewLogin>true</cas:isFromNewLogin>
             <cas:firstname>Example</cas:firstname>
             <cas:lastname>User</cas:lastname>
             <cas:email>example-user@technolutions.com</cas:email>

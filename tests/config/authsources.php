@@ -58,6 +58,7 @@ $config = [
     'casserver_auto_map' => [
         'cas:CAS',
         'cas' => [
+            'slate.enabled' => true,
             'login' => 'https://ugrad.apply.example.edu/account/cas/login',
             'serviceValidate' => 'https://ugrad.apply.example.edu/account/cas/serviceValidate',
             'logout' => 'https://ugrad.apply.example.edu/account/cas/logout',
