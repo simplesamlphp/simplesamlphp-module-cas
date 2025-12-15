@@ -122,7 +122,7 @@ class CAS extends Auth\Source
      * @param \SimpleSAML\Utils\HTTP|null $httpUtils Optional HTTP utilities instance to use
      * @return void
      */
-    protected function initHttpUtils(Utils\HTTP $httpUtils = null): void
+    protected function initHttpUtils(?Utils\HTTP $httpUtils = null): void
     {
         if ($httpUtils !== null) {
             $this->httpUtils = $httpUtils;
