@@ -44,8 +44,10 @@
         "simplesamlphp/simplesamlphp-module-ldap": "~1.2",
         "simplesamlphp/xml-cas-module-slate": "~1.1.0",
         "simplesamlphp/xml-cas": "^v2.2.0",
-        "simplesamlphp/xml-common": "~2.4.0",
-        "symfony/http-foundation": "~7.4.0"
+        "simplesamlphp/xml-common": "~2.4",
+        "symfony/http-foundation": "~7.4",
+        "symfony/http-client": "~7.4",
+        "symfony/http-client-contracts": "^3.5"
     },
     "require-dev": {
         "simplesamlphp/simplesamlphp-test-framework": "^1.10",

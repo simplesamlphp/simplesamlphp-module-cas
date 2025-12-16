@@ -21,6 +21,8 @@ use SimpleSAML\Slate\XML\ServiceResponse as SlateServiceResponse;
 use SimpleSAML\Utils;
 use SimpleSAML\XML\Chunk;
 use SimpleSAML\XML\DOMDocumentFactory;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 use function array_merge_recursive;
 use function preg_split;
@@ -76,10 +78,14 @@ class CAS extends Auth\Source
     private bool $useSlate;
 
     /**
-     * HTTP utility class for making requests and handling redirects.
-     * @var \SimpleSAML\Utils\HTTP
+     * HTTP utilities instance for handling redirects and URLs.
      */
     private Utils\HTTP $httpUtils;
+
+    /**
+     * Symfony HTTP client for CAS requests.
+     */
+    private HttpClientInterface $httpClient;
 
 
     /**
@@ -117,10 +123,29 @@ class CAS extends Auth\Source
 
 
     /**
+     * Initialize HttpClient instance
+     *
+     * @param \Symfony\Contracts\HttpClient\HttpClientInterface|null $httpClient Optional HTTP client instance to use
+     */
+    protected function initHttpClient(?HttpClientInterface $httpClient = null): void
+    {
+        if ($httpClient !== null) {
+            $this->httpClient = $httpClient;
+        } else {
+            $this->httpClient = $this->httpClient ?? HttpClient::create();
+        }
+    }
+
+
+    /**
      * Initialize HTTP utilities instance
      *
      * @param \SimpleSAML\Utils\HTTP|null $httpUtils Optional HTTP utilities instance to use
      * @return void
+     * @deprecated This helper is kept only for the legacy authenticate(array &$state): void
+     *             flow. Once the Request-based authenticate(Request, array &$state): ?Response
+     *             API is active in SimpleSAMLphp, this method will be removed and HTTP
+     *             handling should be done via Symfony responses instead.
      */
     protected function initHttpUtils(?Utils\HTTP $httpUtils = null): void
     {
@@ -142,14 +167,16 @@ class CAS extends Auth\Source
      */
     private function casValidate(string $ticket, string $service): array
     {
-        $this->initHttpUtils();
-        $url = $this->httpUtils->addURLParameters($this->casConfig['validate'], [
-            'ticket' => $ticket,
-            'service' => $service,
+        $this->initHttpClient();
+
+        $response = $this->httpClient->request('GET', $this->casConfig['validate'], [
+            'query' => [
+                'ticket'  => $ticket,
+                'service' => $service,
+            ],
         ]);
 
-        /** @var string $result */
-        $result = $this->httpUtils->fetch($url);
+        $result = $response->getContent();
 
         /** @var list<string> $res */
         $res = preg_split("/\r?\n/", $result) ?: [];
@@ -172,19 +199,24 @@ class CAS extends Auth\Source
      */
     private function casServiceValidate(string $ticket, string $service): array
     {
-        $this->initHttpUtils();
-        $url = $this->httpUtils->addURLParameters(
-            $this->casConfig['serviceValidate'],
-            [
-                'ticket' => $ticket,
+        $this->initHttpClient();
+
+        $response = $this->httpClient->request('GET', $this->casConfig['serviceValidate'], [
+            'query' => [
+                'ticket'  => $ticket,
                 'service' => $service,
             ],
-        );
-        $result = $this->httpUtils->fetch($url);
+        ]);
+
+        $result = $response->getContent();
 
         /** @var string $result */
         $dom = DOMDocumentFactory::fromString($result);
 
+        // In practice that `if (...) return [];` branch is unreachable with the current behavior.
+        // `DOMDocumentFactory::fromString()`
+        // PHPStan still flags / cares about it because it only sees
+        // and has no way to know `null` won’t actually occur here. `DOMElement|null`
         if ($dom->documentElement === null) {
             return [];
         }
@@ -228,7 +260,7 @@ class CAS extends Auth\Source
 
 
     /**
-     * Main validation method, redirects to correct method
+     * Main validation method, redirects to the correct method
      * (keeps finalStep clean)
      *
      * @param string $ticket
