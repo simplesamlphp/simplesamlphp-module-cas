@@ -5,7 +5,7 @@ the only difference is this is authentication module and not a script.
 
 ## Setting up the CAS authentication module
 
-Adding a authentication source
+Adding an authentication source
 
 Example authsource.php:
 
@@ -31,7 +31,7 @@ Example authsource.php:
 
 ## Querying Attributes
 
-CAS V3 (since 2017) supports querying attributes. Those have to be published
+CAS v3 (since 2017) supports querying attributes. Those have to be published
 for the service you're calling. Here the service publishes `sn`, `firstName`
 and `mail`.
 
@@ -49,6 +49,35 @@ Or you might have to call serviceValidate for Protocol 3 via **/p3/**:
 'cas' => [
     'serviceValidate' => 'https://cas.example.com/p3/serviceValidate',
 ]
+```
+
+### Optional: Enabling Slate extensions
+
+Some deployments include vendor‑specific fields (for example `slate:*`) in CAS responses.
+You can opt in to Slate support:
+
+```php
+'cas' => [
+    // ...
+    'serviceValidate' => 'https://cas.example.com/p3/serviceValidate',
+    // Enable Slate support (optional)
+    'slate.enabled' => true,
+    
+    // Optional XPath-based attribute mappings
+    'attributes' => [
+        // Standard CAS attributes
+        'uid'       => 'cas:user',
+        'mail'      => 'cas:attributes/cas:mail',
+    
+        // Slate namespaced attributes inside cas:attributes
+        'slate_person' => 'cas:attributes/slate:person',
+        'slate_round'  => 'cas:attributes/slate:round',
+        'slate_ref'    => 'cas:attributes/slate:ref',
+    
+        // Some deployments also place vendor elements at the top level
+        'slate_person_top' => '/cas:serviceResponse/cas:authenticationSuccess/slate:person',
+    ],
+],
 ```
 
 which would return something like
@@ -76,10 +105,10 @@ for each value:
 ```php
 'cas' => [
     'attributes' => [
-        'uid' => '/cas:serviceResponse/cas:authenticationSuccess/cas:user',
-        'sn' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:sn',
-        'givenName' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:firstname',
-        'mail' => '/cas:serviceResponse/cas:authenticationSuccess/cas:attributes/cas:mail',
+        'uid' => 'cas:user',
+        'sn' => 'cas:attributes/cas:sn',
+        'givenName' => 'cas:attributes/cas:firstname',
+        'mail' => 'cas:attributes/cas:mail',
     ],
 ],
 ```
@@ -87,11 +116,11 @@ for each value:
 and even some custom attributes if they're set:
 
 ```php
-'customabc' => '/cas:serviceResponse/cas:authenticationSuccess/custom:abc',
+'customabc' => 'custom:abc',
 ```
 
 You'll probably want to avoid querying LDAP for attributes:
-set `ldap` to a `null`:
+set `ldap` to `null`:
 
 ```php
 'example-cas' => [

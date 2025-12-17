@@ -1,0 +1,15 @@
+<!-- Example CAS Response -->
+<cas:serviceResponse xmlns:cas="http://www.yale.edu/tp/cas"
+                     xmlns:slate="http://technolutions.com/slate">
+    <cas:authenticationSuccess>
+        <cas:user>example-user@technolutions.com</cas:user>
+        <slate:person>345d2e1b-65de-419c-96ce-e1866d4c57cd</slate:person>
+        <slate:round>Regular Decision</slate:round>
+        <slate:ref>774482874</slate:ref>
+        <cas:attributes>
+            <cas:firstname>Example</cas:firstname>
+            <cas:lastname>User</cas:lastname>
+            <cas:email>example-user@technolutions.com</cas:email>
+        </cas:attributes>
+    </cas:authenticationSuccess>
+</cas:serviceResponse>

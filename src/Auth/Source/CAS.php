@@ -4,20 +4,30 @@ declare(strict_types=1);
 
 namespace SimpleSAML\Module\cas\Auth\Source;
 
-use DOMXpath;
+use DOMDocument;
+use DOMElement;
 use Exception;
-use SAML2\DOMDocumentFactory;
 use SimpleSAML\Auth;
+use SimpleSAML\CAS\Utils\XPath;
+use SimpleSAML\CAS\XML\AuthenticationFailure;
+use SimpleSAML\CAS\XML\AuthenticationSuccess as CasAuthnSuccess;
+use SimpleSAML\CAS\XML\ServiceResponse as CasServiceResponse;
 use SimpleSAML\Configuration;
+use SimpleSAML\Logger;
 use SimpleSAML\Module;
 use SimpleSAML\Module\ldap\Auth\Ldap;
+use SimpleSAML\Slate\XML\AuthenticationSuccess as SlateAuthnSuccess;
+use SimpleSAML\Slate\XML\ServiceResponse as SlateServiceResponse;
 use SimpleSAML\Utils;
+use SimpleSAML\XML\Chunk;
+use SimpleSAML\XML\DOMDocumentFactory;
+use Symfony\Component\HttpClient\HttpClient;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-use function array_key_exists;
 use function array_merge_recursive;
-use function is_null;
 use function preg_split;
 use function strcmp;
+use function strval;
 use function var_export;
 
 /**
@@ -40,13 +50,14 @@ class CAS extends Auth\Source
      */
     public const AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
 
+
     /**
-     * @var array<mixed> with ldap configuration
+     * @var array<string, mixed> with ldap configuration
      */
     private array $ldapConfig;
 
     /**
-     * @var array<mixed> cas configuration
+     * @var array<string, mixed> cas configuration
      */
     private array $casConfig;
 
@@ -62,6 +73,22 @@ class CAS extends Auth\Source
     private string $loginMethod;
 
     /**
+     * @var bool flag indicating if slate XML format should be used
+     */
+    private bool $useSlate;
+
+    /**
+     * HTTP utilities instance for handling redirects and URLs.
+     */
+    private Utils\HTTP $httpUtils;
+
+    /**
+     * Symfony HTTP client for CAS requests.
+     */
+    private HttpClientInterface $httpClient;
+
+
+    /**
      * Constructor for this authentication source.
      *
      * @param array<mixed> $info  Information about this authentication source.
@@ -72,16 +99,10 @@ class CAS extends Auth\Source
         // Call the parent constructor first, as required by the interface
         parent::__construct($info, $config);
 
-        if (!array_key_exists('cas', $config)) {
-            throw new Exception('cas authentication source is not properly configured: missing [cas]');
-        }
+        $authsources = Configuration::loadFromArray($config);
 
-        if (!array_key_exists('ldap', $config)) {
-            throw new Exception('ldap authentication source is not properly configured: missing [ldap]');
-        }
-
-        $this->casConfig = $config['cas'];
-        $this->ldapConfig = $config['ldap'];
+        $this->casConfig = (array)$authsources->getValue('cas');
+        $this->ldapConfig = (array)$authsources->getValue('ldap');
 
         if (isset($this->casConfig['serviceValidate'])) {
             $this->validationMethod = 'serviceValidate';
@@ -96,6 +117,43 @@ class CAS extends Auth\Source
         } else {
             throw new Exception("cas login URL not specified");
         }
+
+        $this->useSlate = $this->casConfig['slate.enabled'] ?? false;
+    }
+
+
+    /**
+     * Initialize HttpClient instance
+     *
+     * @param \Symfony\Contracts\HttpClient\HttpClientInterface|null $httpClient Optional HTTP client instance to use
+     */
+    protected function initHttpClient(?HttpClientInterface $httpClient = null): void
+    {
+        if ($httpClient !== null) {
+            $this->httpClient = $httpClient;
+        } else {
+            $this->httpClient = $this->httpClient ?? HttpClient::create();
+        }
+    }
+
+
+    /**
+     * Initialize HTTP utilities instance
+     *
+     * @param \SimpleSAML\Utils\HTTP|null $httpUtils Optional HTTP utilities instance to use
+     * @return void
+     * @deprecated This helper is kept only for the legacy authenticate(array &$state): void
+     *             flow. Once the Request-based authenticate(Request, array &$state): ?Response
+     *             API is active in SimpleSAMLphp, this method will be removed and HTTP
+     *             handling should be done via Symfony responses instead.
+     */
+    protected function initHttpUtils(?Utils\HTTP $httpUtils = null): void
+    {
+        if ($httpUtils !== null) {
+            $this->httpUtils = $httpUtils;
+        } else {
+            $this->httpUtils = $this->httpUtils ?? new Utils\HTTP();
+        }
     }
 
 
@@ -109,17 +167,19 @@ class CAS extends Auth\Source
      */
     private function casValidate(string $ticket, string $service): array
     {
-        $httpUtils = new Utils\HTTP();
-        $url = $httpUtils->addURLParameters($this->casConfig['validate'], [
-            'ticket' => $ticket,
-            'service' => $service,
+        $this->initHttpClient();
+
+        $response = $this->httpClient->request('GET', $this->casConfig['validate'], [
+            'query' => [
+                'ticket'  => $ticket,
+                'service' => $service,
+            ],
         ]);
 
-        /** @var string $result */
-        $result = $httpUtils->fetch($url);
+        $result = $response->getContent();
 
-        /** @var string $res */
-        $res = preg_split("/\r?\n/", $result);
+        /** @var list<string> $res */
+        $res = preg_split("/\r?\n/", $result) ?: [];
 
         if (strcmp($res[0], "yes") == 0) {
             return [$res[1], []];
@@ -139,51 +199,68 @@ class CAS extends Auth\Source
      */
     private function casServiceValidate(string $ticket, string $service): array
     {
-        $httpUtils = new Utils\HTTP();
-        $url = $httpUtils->addURLParameters(
-            $this->casConfig['serviceValidate'],
-            [
-                'ticket' => $ticket,
+        $this->initHttpClient();
+
+        $response = $this->httpClient->request('GET', $this->casConfig['serviceValidate'], [
+            'query' => [
+                'ticket'  => $ticket,
                 'service' => $service,
             ],
-        );
-        $result = $httpUtils->fetch($url);
+        ]);
+
+        $result = $response->getContent();
 
         /** @var string $result */
         $dom = DOMDocumentFactory::fromString($result);
-        $xPath = new DOMXpath($dom);
-        $xPath->registerNamespace("cas", 'http://www.yale.edu/tp/cas');
 
-        $success = $xPath->query("/cas:serviceResponse/cas:authenticationSuccess/cas:user");
-        if ($success === false || $success->length === 0) {
-            $failure = $xPath->evaluate("/cas:serviceResponse/cas:authenticationFailure");
-            throw new Exception("Error when validating CAS service ticket: " . $failure->item(0)->textContent);
+        // In practice that `if (...) return [];` branch is unreachable with the current behavior.
+        // `DOMDocumentFactory::fromString()`
+        // PHPStan still flags / cares about it because it only sees
+        // and has no way to know `null` won’t actually occur here. `DOMElement|null`
+        if ($dom->documentElement === null) {
+            return [];
+        }
+
+        if ($this->useSlate) {
+            $serviceResponse = SlateServiceResponse::fromXML($dom->documentElement);
         } else {
-            $attributes = [];
-            if ($casattributes = $this->casConfig['attributes']) {
-                // Some has attributes in the xml - attributes is a list of XPath expressions to get them
-                foreach ($casattributes as $name => $query) {
-                    /** @var \DOMNodeList<\DOMNode> $attrs */
-                    $attrs = $xPath->query($query);
-                    foreach ($attrs as $attrvalue) {
-                        $attributes[$name][] = $attrvalue->textContent;
-                    }
+            $serviceResponse = CasServiceResponse::fromXML($dom->documentElement);
+        }
+
+        $message = $serviceResponse->getResponse();
+        if ($message instanceof AuthenticationFailure) {
+            throw new Exception(sprintf(
+                "Error when validating CAS service ticket: %s (%s)",
+                strval($message->getContent()),
+                strval($message->getCode()),
+            ));
+        } elseif ($message instanceof CasAuthnSuccess || $message instanceof SlateAuthnSuccess) {
+            [$user, $attributes] = $this->parseAuthenticationSuccess($message);
+
+            // This will only be parsed if i have an attribute query. If the configuration
+            // array is empty or not set then an empty array will be returned.
+            $attributesFromQueryConfiguration = $this->parseQueryAttributes($dom);
+            if (!empty($attributesFromQueryConfiguration)) {
+              // Overwrite attributes from parseAuthenticationSuccess with configured
+              // XPath-based attributes, instead of combining them.
+                foreach ($attributesFromQueryConfiguration as $name => $values) {
+                  // Ensure a clean, unique list of string values
+                    $values = array_values(array_unique(array_map('strval', $values)));
+
+                  // Configuration wins: replace any existing attribute with the same name
+                    $attributes[$name] = $values;
                 }
             }
 
-            $item = $success->item(0);
-            if (is_null($item)) {
-                throw new Exception("Error parsing serviceResponse.");
-            }
-            $casusername = $item->textContent;
-
-            return [$casusername, $attributes];
+            return [$user, $attributes];
         }
+
+        throw new Exception("Error parsing serviceResponse.");
     }
 
 
     /**
-     * Main validation method, redirects to correct method
+     * Main validation method, redirects to the correct method
      * (keeps finalStep clean)
      *
      * @param string $ticket
@@ -212,8 +289,8 @@ class CAS extends Auth\Source
         $ticket = $state['cas:ticket'];
         $stateId = Auth\State::saveState($state, self::STAGE_INIT);
         $service = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
-        list($username, $casattributes) = $this->casValidation($ticket, $service);
-        $ldapattributes = [];
+        list($username, $casAttributes) = $this->casValidation($ticket, $service);
+        $ldapAttributes = [];
 
         $config = Configuration::loadFromArray(
             $this->ldapConfig,
@@ -228,12 +305,13 @@ class CAS extends Auth\Source
                 $config->getOptionalInteger('port', 389),
                 $config->getOptionalBoolean('referrals', true),
             );
-            $ldapattributes = $ldap->validate($this->ldapConfig, $username);
-            if ($ldapattributes === false) {
+
+            $ldapAttributes = $ldap->validate($this->ldapConfig, $username);
+            if ($ldapAttributes === false) {
                 throw new Exception("Failed to authenticate against LDAP-server.");
             }
         }
-        $attributes = array_merge_recursive($casattributes, $ldapattributes);
+        $attributes = array_merge_recursive($casAttributes, $ldapAttributes);
         $state['Attributes'] = $attributes;
     }
 
@@ -252,8 +330,8 @@ class CAS extends Auth\Source
 
         $serviceUrl = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
 
-        $httpUtils = new Utils\HTTP();
-        $httpUtils->redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
+        $this->initHttpUtils();
+        $this->httpUtils->redirectTrustedURL($this->loginMethod, ['service' => $serviceUrl]);
     }
 
 
@@ -277,7 +355,181 @@ class CAS extends Auth\Source
         Auth\State::deleteState($state);
 
         // we want cas to log us out
-        $httpUtils = new Utils\HTTP();
-        $httpUtils->redirectTrustedURL($logoutUrl);
+        $this->initHttpUtils();
+        $this->httpUtils->redirectTrustedURL($logoutUrl);
+    }
+
+
+    /**
+     * Parse a CAS AuthenticationSuccess into a flat associative array.
+     *
+     * Rules:
+     * - 'user' => content
+     * - For each attribute element (Chunk):
+     *   - If prefix is 'cas' or empty => key is localName
+     *   - Else => key is "prefix:localName"
+     *   - Value is the element's textContent
+     *   - If multiple values for the same key, collect into array
+     *
+     * @param \SimpleSAML\CAS\XML\AuthenticationSuccess|\SimpleSAML\Slate\XML\AuthenticationSuccess $message
+     *        The authentication success message to parse
+     * @return array{
+     *   0: \SimpleSAML\XMLSchema\Type\Interface\ValueTypeInterface,
+     *   1: array<string, list<string>>
+     * }
+     */
+    private function parseAuthenticationSuccess(CasAuthnSuccess|SlateAuthnSuccess $message): array
+    {
+        /** @var array<string, list<string>> $result */
+        $result = [];
+
+        // user -> content
+        $user = $message->getUser()->getContent();
+
+        // attributes -> elements (array of SimpleSAML\XML\Chunk)
+        $attributes = $message->getAttributes();
+        /** @var list<\SimpleSAML\XML\Chunk> $elements */
+        $elements = $attributes->getElements();
+
+        foreach ($elements as $chunk) {
+            // Safely extract localName, prefix, and DOMElement from the Chunk
+            $localName = $chunk->getLocalName();
+            $prefix = $chunk->getPrefix();
+            // DOMElement carrying the actual text content
+            $xmlElement = $chunk->getXML();
+
+            if (!$localName) {
+                continue; // skip malformed entries
+            }
+
+            // Key selection rule
+            $key = ($prefix === '' || $prefix === 'cas')
+                ? $localName
+                : ($prefix . ':' . $localName);
+
+            $value = trim($xmlElement->textContent ?? '');
+
+            // Collect values (single or multi)
+            $result[$key] ??= [];
+            $result[$key][] = $value;
+        }
+
+        // (DOMElement instances under cas:authenticationSuccess, outside cas:attributes)
+        $this->parseAuthenticationSuccessMetadata($message, $result);
+
+        return [$user, $result];
+    }
+
+
+    /**
+     * Parse metadata elements from AuthenticationSuccess message and add them to attributes array
+     *
+     * @param \SimpleSAML\CAS\XML\AuthenticationSuccess|\SimpleSAML\Slate\XML\AuthenticationSuccess $message
+     *        The authentication success message
+     * @param array<string,list<string>> &$attributes Reference to attributes array to update
+     * @return void
+     */
+    private function parseAuthenticationSuccessMetadata(
+        CasAuthnSuccess|SlateAuthnSuccess $message,
+        array &$attributes,
+    ): void {
+        if (!method_exists($message, 'getElements')) {
+            // Either bail out or use a fallback
+            return;
+        }
+
+        $metaElements = $message->getElements();
+
+        foreach ($metaElements as $element) {
+            if (!$element instanceof Chunk) {
+                continue;
+            }
+
+            $localName = $element->getLocalName();
+            $prefix    = $element->getPrefix();
+
+            if ($localName === '') {
+                continue;
+            }
+
+            // For metadata elements we do NOT special-case 'cas':
+            // we always use "prefix:localName" when there is a prefix,
+            // and just localName when there is none.
+            $key = ($prefix === '')
+                ? $localName
+                : ($prefix . ':' . $localName);
+
+            $value = trim($element->getXML()->textContent ?? '');
+
+            $attributes[$key] ??= [];
+            $attributes[$key][] = $value;
+        }
+    }
+
+
+    /**
+     * Parse metadata attributes from CAS response XML using configured XPath queries
+     *
+     * @param \DOMDocument $dom The XML document containing CAS response
+     * @return array<string,array<string>> Array of metadata attribute names and values
+     */
+    private function parseQueryAttributes(DOMDocument $dom): array
+    {
+        $root = $dom->documentElement;
+        if (!$root instanceof DOMElement) {
+            return [];
+        }
+
+        $xPath = XPath::getXPath($root, true);
+
+        $metadata = [];
+        $casattributes = $this->casConfig['attributes'] ?? null;
+        if (!is_array($casattributes)) {
+            return $metadata;
+        }
+
+        /** @var list<\DOMElement> $authnNodes */
+        $authnNodes = XPath::xpQuery($root, 'cas:authenticationSuccess', $xPath);
+        /** @var \DOMElement|null $authn */
+        $authn = $authnNodes[0] ?? null;
+
+        // Some have attributes in the xml - attributes is a list of XPath expressions to get them
+        foreach ($casattributes as $name => $query) {
+            $marker = 'cas:authenticationSuccess/';
+
+            if (isset($query[0]) && $query[0] === '/') {
+                // Absolute XPath
+                if (strpos($query, $marker) !== false && $authn instanceof \DOMElement) {
+                    $originalQuery = $query;
+                    $query = substr($query, strpos($query, $marker) + strlen($marker));
+                    Logger::info(sprintf(
+                        'CAS client: rewriting absolute CAS XPath for "%s" from "%s" to relative "%s"',
+                        $name,
+                        $originalQuery,
+                        $query,
+                    ));
+                    $nodes = XPath::xpQuery($authn, $query, $xPath);
+                } else {
+                    // Keep absolute; evaluate from document root
+                    $nodes = XPath::xpQuery($root, $query, $xPath);
+                }
+            } else {
+                // Relative XPath; prefer evaluating under authenticationSuccess if available
+                $context = $authn instanceof DOMElement ? $authn : $root;
+                $nodes = XPath::xpQuery($context, $query, $xPath);
+            }
+
+            foreach ($nodes as $n) {
+                $metadata[$name][] = trim($n->textContent);
+            }
+
+            Logger::debug(sprintf(
+                'CAS client: parsed metadata %s => %s',
+                $name,
+                json_encode($metadata[$name] ?? []),
+            ));
+        }
+
+        return $metadata;
     }
 }
