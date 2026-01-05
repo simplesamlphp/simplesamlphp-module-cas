@@ -34,28 +34,24 @@
         }
     },
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
+
         "ext-pcre": "*",
         "ext-dom": "*",
 
         "simplesamlphp/assert": "^1.9",
-        "simplesamlphp/composer-module-installer": "^1.4",
-        "simplesamlphp/simplesamlphp": "dev-simplesamlphp-2.5 as v2.5.x-dev",
-        "simplesamlphp/simplesamlphp-module-ldap": "~1.2",
-        "simplesamlphp/xml-cas-module-slate": "~1.1.0",
-        "simplesamlphp/xml-cas": "^v2.2.0",
-        "simplesamlphp/xml-common": "~2.4",
-        "symfony/http-foundation": "~7.4",
-        "symfony/http-client": "~7.4",
+        "simplesamlphp/composer-module-installer": "^1.5",
+        "simplesamlphp/simplesamlphp": "^2.5@dev",
+        "simplesamlphp/simplesamlphp-module-ldap": "^1.2",
+        "simplesamlphp/xml-cas-module-slate": "^1.2",
+        "simplesamlphp/xml-cas": "^2.3",
+        "simplesamlphp/xml-common": "^2.5",
+        "symfony/http-foundation": "^7.4",
+        "symfony/http-client": "^7.4",
         "symfony/http-client-contracts": "^3.5"
     },
     "require-dev": {
-        "simplesamlphp/simplesamlphp-test-framework": "^1.10",
-        "phpunit/phpunit": "^11",
-        "icanhazstring/composer-unused": "^0.9.5",
-        "squizlabs/php_codesniffer": "^4.0.0",
-        "phpstan/phpstan": "^2.1.33",
-        "maglnet/composer-require-checker": "^4"
+        "simplesamlphp/simplesamlphp-test-framework": "^1.11"
     },
     "support": {
         "issues": "https://github.com/simplesamlphp/simplesamlphp-module-cas/issues",

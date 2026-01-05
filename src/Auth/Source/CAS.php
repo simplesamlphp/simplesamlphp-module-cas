@@ -43,12 +43,12 @@ class CAS extends Auth\Source
     /**
      * The string used to identify our states.
      */
-    public const STAGE_INIT = '\SimpleSAML\Module\cas\Auth\Source\CAS.state';
+    public const string STAGE_INIT = '\SimpleSAML\Module\cas\Auth\Source\CAS.state';
 
     /**
      * The key of the AuthId field in the state.
      */
-    public const AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
+    public const string AUTHID = '\SimpleSAML\Module\cas\Auth\Source\CAS.AuthId';
 
 
     /**
@@ -64,7 +64,6 @@ class CAS extends Auth\Source
     /**
      * @var string cas chosen validation method
      */
-
     private string $validationMethod;
 
     /**
