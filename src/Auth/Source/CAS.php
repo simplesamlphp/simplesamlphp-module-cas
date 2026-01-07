@@ -15,7 +15,7 @@ use SimpleSAML\CAS\XML\ServiceResponse as CasServiceResponse;
 use SimpleSAML\Configuration;
 use SimpleSAML\Logger;
 use SimpleSAML\Module;
-use SimpleSAML\Module\ldap\Auth\Ldap;
+use SimpleSAML\Module\ldap\Auth\Source\Ldap;
 use SimpleSAML\Slate\XML\AuthenticationSuccess as SlateAuthnSuccess;
 use SimpleSAML\Slate\XML\ServiceResponse as SlateServiceResponse;
 use SimpleSAML\Utils;
@@ -28,7 +28,6 @@ use function array_merge_recursive;
 use function preg_split;
 use function strcmp;
 use function strval;
-use function var_export;
 
 /**
  * Authenticate using CAS.
@@ -240,13 +239,13 @@ class CAS extends Auth\Source
             // array is empty or not set then an empty array will be returned.
             $attributesFromQueryConfiguration = $this->parseQueryAttributes($dom);
             if (!empty($attributesFromQueryConfiguration)) {
-              // Overwrite attributes from parseAuthenticationSuccess with configured
-              // XPath-based attributes, instead of combining them.
+                // Overwrite attributes from parseAuthenticationSuccess with configured
+                // XPath-based attributes, instead of combining them.
                 foreach ($attributesFromQueryConfiguration as $name => $values) {
-                  // Ensure a clean, unique list of string values
+                    // Ensure a clean, unique list of string values
                     $values = array_values(array_unique(array_map('strval', $values)));
 
-                  // Configuration wins: replace any existing attribute with the same name
+                    // Configuration wins: replace any existing attribute with the same name
                     $attributes[$name] = $values;
                 }
             }
@@ -281,35 +280,46 @@ class CAS extends Auth\Source
 
     /**
      * Called by linkback, to finish validate/ finish logging in.
+     *
      * @param array<mixed> $state
      */
+
     public function finalStep(array &$state): void
     {
         $ticket = $state['cas:ticket'];
         $stateId = Auth\State::saveState($state, self::STAGE_INIT);
         $service = Module::getModuleURL('cas/linkback.php', ['stateId' => $stateId]);
-        list($username, $casAttributes) = $this->casValidation($ticket, $service);
+
+        [$username, $casAttributes] = $this->casValidation($ticket, $service);
+
         $ldapAttributes = [];
 
-        $config = Configuration::loadFromArray(
-            $this->ldapConfig,
-            'Authentication source ' . var_export($this->authId, true),
-        );
-        if (!empty($this->ldapConfig['servers'])) {
-            $ldap = new Ldap(
-                $config->getString('servers'),
-                $config->getOptionalBoolean('enable_tls', false),
-                $config->getOptionalBoolean('debug', false),
-                $config->getOptionalInteger('timeout', 0),
-                $config->getOptionalInteger('port', 389),
-                $config->getOptionalBoolean('referrals', true),
-            );
+        // Expect $this->ldapConfig to contain an 'authsource' key when LDAP is desired
+        $backendId = $this->ldapConfig['authsource'] ?? null;
 
-            $ldapAttributes = $ldap->validate($this->ldapConfig, $username);
-            if ($ldapAttributes === false) {
-                throw new Exception("Failed to authenticate against LDAP-server.");
+        if ($backendId !== null) {
+            /** @var \SimpleSAML\Auth\Source|null $source */
+            $source = Auth\Source::getById($backendId);
+            if ($source === null) {
+                throw new Exception('Could not find authentication source with id ' . $backendId);
+            }
+
+            // Ensure we only call getAttributes() on an LDAP authsource that supports it
+            if (!$source instanceof Ldap) {
+                throw new Exception(sprintf(
+                    "Configured ldap.authsource '%s' is not an LDAP authsource.",
+                    $backendId,
+                ));
+            }
+
+            try {
+                $ldapAttributes = $source->getAttributes($username);
+            } catch (Exception $e) {
+                Logger::debug('CAS - ldap lookup failed: ' . $e->getMessage());
+                $ldapAttributes = [];
             }
         }
+
         $attributes = array_merge_recursive($casAttributes, $ldapAttributes);
         $state['Attributes'] = $attributes;
     }
