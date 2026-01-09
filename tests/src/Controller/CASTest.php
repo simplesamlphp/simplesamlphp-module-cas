@@ -21,6 +21,8 @@ use SimpleSAML\Slate\XML\ServiceResponse as SlateServiceResponse;
 use SimpleSAML\XML\DOMDocumentFactory;
 use SimpleSAML\XMLSchema\Type\Interface\ValueTypeInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Symfony\Contracts\HttpClient\ResponseInterface;
 
 /**
  * Set of tests for the controllers in the "cas" module.
@@ -53,6 +55,7 @@ final class CASTest extends TestCase
                 'module.enable' => [
                     'cas' => true,
                     'core' => true,
+                    'ldap' => true,
                 ],
             ],
             '[ARRAY]',
@@ -528,5 +531,127 @@ final class CASTest extends TestCase
                 "Attribute '$key' values mismatch",
             );
         }
+    }
+
+
+    /**
+     * finalStep() should throw if ldap.authsource points to a non‑existent authsource.
+     */
+    public function testFinalStepThrowsWhenLdapAuthsourceNotFound(): void
+    {
+        $config = [
+            'cas' => [
+                'login'          => 'https://example.org/login',
+                'serviceValidate' => 'https://example.org/serviceValidate',
+                'logout'         => 'https://example.org/logout',
+            ],
+            'ldap' => [
+                'authsource' => 'missing-backend',
+            ],
+        ];
+
+        // Override casValidation to avoid real HTTP calls
+        $cas = new class (['AuthId' => 'unit-cas'], $config) extends CAS {
+            protected function casValidation(string $ticket, string $service): array
+            {
+                return ['user123', ['fromCas' => ['value']]];
+            }
+        };
+
+        $state = ['cas:ticket' => 'ST-1-abc'];
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Could not find authentication source with id missing-backend');
+
+        $cas->finalStep($state);
+    }
+
+
+    /**
+     * finalStep() should throw if ldap.authsource exists but is not an LDAP authsource.
+     *
+     * Here we re‑use the "something" authsource from the tests' authsources.php,
+     * which is configured as a cas:CAS authsource, not ldap:LDAP.
+     */
+    public function testFinalStepThrowsWhenLdapAuthsourceIsNotLdap(): void
+    {
+        $config = [
+            'cas' => [
+                'login'          => 'https://example.org/login',
+                'serviceValidate' => 'https://example.org/serviceValidate',
+                'logout'         => 'https://example.org/logout',
+            ],
+            'ldap' => [
+                'authsource' => 'something',
+            ],
+        ];
+
+        $cas = new class (['AuthId' => 'unit-cas'], $config) extends CAS {
+            protected function casValidation(string $ticket, string $service): array
+            {
+                return ['user123', ['fromCas' => ['value']]];
+            }
+        };
+
+        $state = ['cas:ticket' => 'ST-1-abc'];
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage(
+            "Configured ldap.authsource 'something' is not an LDAP authsource.",
+        );
+
+        $cas->finalStep($state);
+    }
+
+
+    /**
+     * Test that CAS finalStep() handles LDAP errors gracefully.
+     * When LDAP lookup fails, the method should:
+     * - Not throw an exception
+     * - Only use attributes from CAS validation
+     * - Set the username from CAS in the state
+     */
+    public function testFinalStepSwallowsLdapErrorException(): void
+    {
+        $config = [
+            'cas' => [
+                'login'   => 'https://example.org/login',
+                'validate' => 'https://example.org/validate',   // CAS 1.0, no serviceValidate
+                // no 'serviceValidate' here on purpose
+                'logout'  => 'https://example.org/logout',
+            ],
+            'ldap' => [
+                'authsource' => 'ldap-backend',
+            ],
+        ];
+
+        $cas = new CAS(['AuthId' => 'unit-cas'], $config);
+
+        // Mock HttpClient: casValidate() expects "yes\n<user>\n"
+        $httpClient = $this->createMock(HttpClientInterface::class);
+        $response   = $this->createMock(ResponseInterface::class);
+
+        $httpClient
+            ->method('request')
+            ->willReturn($response);
+
+        $response
+            ->method('getContent')
+            ->willReturn("yes\nuser123\n");
+
+        // Inject mocked client
+        $ref = new \ReflectionClass($cas);
+        $initHttpClient = $ref->getMethod('initHttpClient');
+        $initHttpClient->setAccessible(true);
+        $initHttpClient->invoke($cas, $httpClient);
+
+        $state = ['cas:ticket' => 'ST-1-xyz'];
+
+        // Should not throw; LDAP error will be caught
+        $cas->finalStep($state);
+
+        // Attributes should come from CAS only; LDAP failure resulted in $ldapAttributes = []
+        $this->assertArrayHasKey('Attributes', $state);
+        $this->assertSame([], $state['Attributes']);
     }
 }

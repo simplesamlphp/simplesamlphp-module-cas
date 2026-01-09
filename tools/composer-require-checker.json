@@ -1,5 +1,5 @@
 {
-  "symbol-whitelist": [
-    "SimpleSAML\\Module\\ldap\\Auth\\Ldap"
-  ]
+    "symbol-whitelist": [
+        "SimpleSAML\\Module\\ldap\\Auth\\Source\\Ldap"
+    ]
 }

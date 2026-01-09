@@ -79,4 +79,19 @@ $config = [
         ],
         'ldap' => [],
     ],
+    // LDAP backend used by CAS ldap tests
+    'ldap-backend' => [
+        'ldap:Ldap',
+        'connection_string' => 'ldap://ldap.invalid.example.test', // invalid host to force failure later
+        'search' => [
+            'base'   => ['dc=example,dc=com'],
+            'filter' => '(uid=%username%)',
+            'scope'  => 'sub',
+        ],
+        // Optional:
+        // 'attributes'        => ['*'],
+        // 'attributes.binary' => [],
+        // 'timeout'           => 3,
+        // 'options'           => ['network_timeout' => 3, 'referrals' => false],
+    ],
 ];
